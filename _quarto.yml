@@ -1,0 +1,30 @@
+project:
+  type: website
+  output-dir: _site
+  render:
+    - index.qmd
+    - en/chapters/*.qmd
+    - tr/chapters/*.qmd
+
+website:
+  title: "Uygulamalı Doğal Dil İşleme — Slides"
+  site-url: https://bbardakk.github.io/uygulamali-dogal-dil-isleme-slides
+  repo-url: https://github.com/bbardakk/uygulamali-dogal-dil-isleme-slides
+
+# Every chapter deck shares one look, taken from the book's own palette and fonts.
+format:
+  revealjs:
+    theme: [default, theme/slides.scss]
+    slide-number: c/t
+    hash-type: number
+    transition: none
+    controls: true
+    progress: true
+    center: false
+    width: 1280
+    height: 720
+    margin: 0.06
+    code-copy: true
+    footer: "Uygulamalı Doğal Dil İşleme · Applied NLP"
+    chalkboard: false
+    pdf-separate-fragments: false

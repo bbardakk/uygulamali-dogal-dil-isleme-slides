@@ -1,0 +1,34 @@
+---
+title: "Uygulamalı Doğal Dil İşleme — Slides"
+subtitle: "Lecture slides for *Applied Natural Language Processing — From Tokens to Agents* · *Uygulamalı Doğal Dil İşleme — Token'lardan Ajanlara* ders slaytları"
+format: html
+---
+
+One deck per chapter, in English and in Turkish, following the book chapter by
+chapter. In a deck, press **S** for the speaker notes, **F** for full screen and
+**Esc** for the slide overview.
+
+Her bölüm için İngilizce ve Türkçe birer sunum; kitabı bölüm bölüm izler. Sunum
+açıkken konuşmacı notları için **S**, tam ekran için **F**, slayt görünümü için
+**Esc** tuşuna basın.
+
+## English
+
+| Chapter                | Deck                                     |
+|:-----------------------|:-----------------------------------------|
+| 1 · Why NLP, Why Now   | [Slides](en/chapters/01-why-nlp-now.html) |
+
+## Türkçe
+
+| Bölüm                          | Sunum                                    |
+|:-------------------------------|:-----------------------------------------|
+| 1 · NLP: Neden ve Neden Şimdi  | [Slaytlar](tr/chapters/01-neden-nlp.html) |
+
+## The book and the notebooks · Kitap ve notebook'lar
+
+- Book · Kitap: <https://bbardakk.github.io/uygulamali-dogal-dil-isleme/>
+- Notebooks · Notebook'lar: <https://github.com/bbardakk/uygulamali-dogal-dil-isleme-notebooks>
+- Slide source · Slayt kaynağı: <https://github.com/bbardakk/uygulamali-dogal-dil-isleme-slides>
+
+Slide content is licensed CC BY 4.0; build configuration, theme and scripts are MIT.
+Slayt içeriği CC BY 4.0, yapılandırma, tema ve betikler MIT lisanslıdır.

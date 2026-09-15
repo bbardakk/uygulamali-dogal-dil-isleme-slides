@@ -1,0 +1,389 @@
+/*-- scss:defaults --*/
+
+// ── Applied NLP · slide theme ─────────────────────────────────
+// The book's identity (en/theme/custom-light.scss in the book repository),
+// resized for a 1280×720 deck read from the back of a lecture hall:
+// serif body like a book, grotesk headings, mono for code, and the
+// highlighter marker used like an annotation over text.
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+$anlp-paper:     #F7F8F9;   // slide background (cool paper)
+$anlp-surface:   #FFFFFF;   // cards, code blocks
+$anlp-ink:       #1A1F33;   // body text
+$anlp-muted:     #5B6272;   // secondary text
+$anlp-accent:    #0E7C7B;   // deep teal — links, active states
+$anlp-highlight: #FFE9A8;   // marker yellow — annotation highlights
+
+$anlp-border:    #E3E7EC;
+$anlp-chip-bg:   #EDF2F2;
+$anlp-warm:      #C08A3E;
+$anlp-rose:      #B3453E;
+$anlp-navy:      #1F4E79;
+
+$anlp-heading-font: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+
+// Quarto reveal.js variables
+$body-bg: $anlp-paper;
+$body-color: $anlp-ink;
+$text-muted: $anlp-muted;
+$link-color: $anlp-accent;
+$link-color-hover: #0A5757;   // the accent, 8% darker
+$selection-bg: $anlp-highlight;
+$selection-color: $anlp-ink;
+$light-bg-text-color: $anlp-ink;
+$light-bg-link-color: $anlp-accent;
+$light-bg-code-color: #0B5F5E;
+
+$font-family-sans-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+$font-family-monospace: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+// 32px body on a 1280×720 slide; tables drop to ~24px, never lower.
+$presentation-font-size-root: 32px;
+$presentation-font-smaller: 0.85;
+$presentation-line-height: 1.4;
+$presentation-block-margin: 14px;
+
+$presentation-heading-font: $anlp-heading-font;
+$presentation-heading-color: $anlp-ink;
+$presentation-heading-font-weight: 600;
+$presentation-heading-line-height: 1.15;
+$presentation-heading-letter-spacing: -0.015em;
+$presentation-h1-font-size: 1.9em;
+$presentation-h2-font-size: 1.28em;
+$presentation-h3-font-size: 0.95em;
+$presentation-title-slide-text-align: left;
+
+$code-color: #0B5F5E;
+$code-bg: $anlp-chip-bg;
+$code-block-bg: $anlp-surface;
+$code-block-border-color: $anlp-border;
+$code-block-font-size: 0.62em;
+$border-color: $anlp-border;
+
+/*-- scss:rules --*/
+
+// ── Title slide ───────────────────────────────────────────────
+.reveal #title-slide .title {
+  font-size: 1.9em;
+  font-weight: 700;
+  color: $anlp-ink;
+  letter-spacing: -0.02em;
+}
+.reveal #title-slide .subtitle {
+  font-family: $anlp-heading-font;
+  font-size: 0.95em;
+  font-weight: 500;
+  color: $anlp-accent;
+}
+.reveal #title-slide .subtitle::before {
+  content: '';
+  display: block;
+  width: 3.2em;
+  height: 0.3em;
+  margin: 0.2em 0 0.7em 0;
+  border-radius: 0.15em;
+  background: $anlp-highlight;
+}
+.reveal #title-slide .quarto-title-authors {
+  justify-content: flex-start;
+}
+.reveal #title-slide .quarto-title-author-name {
+  font-family: $anlp-heading-font;
+  font-size: 0.8em;
+  color: $anlp-muted;
+}
+
+// ── Type ──────────────────────────────────────────────────────
+.reveal .slide h2 {
+  margin-bottom: 0.55em;
+}
+.reveal .slide h3 {
+  color: $anlp-accent;
+  margin: 0 0 0.4em 0;
+}
+.reveal .slide p {
+  line-height: 1.4;
+}
+.reveal .slide strong {
+  font-weight: 600;
+}
+.reveal .slide a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+.reveal .slide code:not(.sourceCode) {
+  font-size: 0.85em;
+  padding: 0.04em 0.3em;
+  border: 1px solid $anlp-border;
+  border-radius: 0.3em;
+  background: $anlp-chip-bg;
+  color: #0B5F5E;
+}
+
+// Lists: block, not reveal's centred inline-block, with teal markers
+.reveal .slide ul,
+.reveal .slide ol {
+  display: block;
+  margin: 0 0 0 1.15em;
+}
+.reveal .slide li {
+  line-height: 1.38;
+}
+.reveal .slide li + li {
+  margin-top: 0.32em;
+}
+.reveal .slide li > ul,
+.reveal .slide li > ol {
+  margin-top: 0.25em;
+  font-size: 0.9em;
+}
+.reveal .slide ul > li::marker {
+  color: $anlp-accent;
+}
+.reveal .slide ol > li::marker {
+  color: $anlp-accent;
+  font-family: $anlp-heading-font;
+  font-weight: 600;
+}
+
+// ── Signature: annotation highlight ───────────────────────────
+// Usage in .qmd:  [key phrase]{.hl}
+.reveal .slide .hl {
+  background: linear-gradient(180deg, transparent 8%, $anlp-highlight 8%, $anlp-highlight 92%, transparent 92%);
+  padding: 0.02em 0.25em;
+  border-radius: 0.3em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+// Inline verdict marks, for pros-and-cons tables
+.reveal .slide .pro { color: $anlp-accent; font-weight: 600; }
+.reveal .slide .con { color: $anlp-rose;   font-weight: 600; }
+
+// ── Tables: full width, ~24px, rules instead of boxes ─────────
+.reveal .slide table {
+  width: 100%;
+  margin: 0.2em 0 0.5em 0;
+  font-size: 0.75em;
+  line-height: 1.3;
+  border-collapse: collapse;
+  border-top: 2px solid $anlp-ink;
+}
+.reveal .slide table th {
+  font-family: $anlp-heading-font;
+  font-weight: 600;
+  text-align: left;
+  vertical-align: bottom;
+  padding: 0.35em 0.5em;
+  border-bottom: 1.5px solid $anlp-ink;
+}
+.reveal .slide table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.36em 0.5em;
+  border-bottom: 1px solid $anlp-border;
+}
+.reveal .slide table tbody tr:last-child td {
+  border-bottom: 2px solid $anlp-ink;
+}
+.reveal .slide table td strong {
+  font-family: $anlp-heading-font;
+  font-weight: 600;
+}
+.reveal .slide table sup {
+  font-size: 0.7em;
+}
+// A table with few rows can afford larger type: wrap it in ::: {.roomy}
+.reveal .slide .roomy table {
+  font-size: 0.8em;
+}
+
+// ── Layout helpers ────────────────────────────────────────────
+.reveal .slide .columns {
+  display: flex;
+  align-items: flex-start;
+}
+.reveal .slide .column {
+  box-sizing: border-box;
+}
+.reveal .slide .column + .column {
+  padding-left: 1em;
+}
+.reveal .slide .compact {
+  font-size: 0.9em;
+}
+
+// A sentence that opens a slide
+.reveal .slide .lede {
+  font-size: 1.04em;
+  margin-bottom: 0.35em;
+}
+.reveal .slide .lede p {
+  margin: 0 0 0.3em 0;
+}
+
+// The one sentence to carry out of the room
+.reveal .slide .takeaway {
+  margin: 0.7em 0 0 0;
+  padding: 0.45em 0.75em;
+  background: $anlp-surface;
+  border: 1px solid $anlp-border;
+  border-left: 0.22em solid $anlp-accent;
+  border-radius: 0 0.4em 0.4em 0;
+}
+.reveal .slide .takeaway p {
+  margin: 0;
+}
+
+// Source line: author–year, no bibliography processing
+.reveal .slide .src {
+  margin-top: 0.9em;
+  font-family: $anlp-heading-font;
+  font-size: 0.56em;
+  color: $anlp-muted;
+  letter-spacing: 0.01em;
+}
+.reveal .slide .src p {
+  margin: 0;
+}
+
+// A quieter closing line
+.reveal .slide .small-note {
+  margin-top: 0.8em;
+  font-size: 0.72em;
+  color: $anlp-muted;
+}
+.reveal .slide .small-note p {
+  margin: 0;
+}
+
+// Document-type chips
+.reveal .slide .chip {
+  display: inline-block;
+  margin: 0 0.25em 0.45em 0;
+  padding: 0.26em 0.55em;
+  font-family: $anlp-heading-font;
+  font-size: 0.8em;
+  line-height: 1.2;
+  background: rgba($anlp-accent, 0.10);
+  border: 1.5px solid $anlp-accent;
+  border-radius: 0.45em;
+}
+
+// A typed database table, drawn as code
+.reveal .slide .db table {
+  font-family: $font-family-monospace;
+  font-size: 0.8em;
+  background: $anlp-surface;
+  border-top: 1.5px solid $anlp-border;
+}
+.reveal .slide .db table td {
+  color: $anlp-muted;
+}
+.reveal .slide .db table code {
+  font-size: 0.95em;
+}
+.reveal .slide .db table tbody tr:last-child td {
+  border-bottom: 1.5px solid $anlp-border;
+}
+
+// One large number
+.reveal .slide .bignum {
+  display: block;
+  margin: 0.1em 0 0.15em 0;
+  font-family: $anlp-heading-font;
+  font-size: 2.9em;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: $anlp-accent;
+}
+.reveal .slide .stat {
+  font-size: 0.88em;
+}
+
+// ── In-class questions ────────────────────────────────────────
+.reveal .slides section.question h2 {
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: $anlp-accent;
+  margin-bottom: 0.5em;
+}
+.reveal .slide .ask {
+  margin: 0.1em 0 0.8em 0;
+  padding: 0.1em 0 0.1em 0.6em;
+  font-family: $anlp-heading-font;
+  font-size: 1.2em;
+  font-weight: 500;
+  color: $anlp-ink;
+  border-left: 0.22em solid $anlp-accent;
+}
+.reveal .slide .ask p {
+  margin: 0;
+  line-height: 1.25;
+}
+
+// ── Timeline: five eras, one coloured bar each ────────────────
+.reveal .slide .timeline .column {
+  position: relative;
+  padding: 0.75em 0.45em 0 0.45em;
+  font-family: $anlp-heading-font;
+  font-size: 0.7em;
+}
+.reveal .slide .timeline .column::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0.2em;
+  right: 0.2em;
+  height: 0.38em;
+  border-radius: 0.19em;
+  background: $anlp-muted;
+}
+.reveal .slide .timeline .era-1::before { background: $anlp-warm; }
+.reveal .slide .timeline .era-2::before { background: $anlp-muted; }
+.reveal .slide .timeline .era-3::before { background: $anlp-accent; }
+.reveal .slide .timeline .era-4::before { background: $anlp-navy; }
+.reveal .slide .timeline .era-5::before { background: $anlp-rose; }
+.reveal .slide .timeline p {
+  margin: 0;
+  line-height: 1.25;
+}
+.reveal .slide .timeline .era-name {
+  display: block;
+  font-size: 1.12em;
+  font-weight: 600;
+  color: $anlp-ink;
+}
+.reveal .slide .timeline .era-years {
+  display: block;
+  color: $anlp-muted;
+}
+.reveal .slide .timeline ul {
+  display: block;
+  margin: 0.6em 0 0 0;
+  padding: 0;
+  list-style: none;
+}
+.reveal .slide .timeline li {
+  margin: 0 0 0.55em 0;
+  line-height: 1.25;
+}
+.reveal .slide .timeline li + li {
+  margin-top: 0;
+}
+.reveal .slide .timeline li strong {
+  font-weight: 700;
+}
+
+// ── Chrome ────────────────────────────────────────────────────
+.reveal .footer {
+  font-family: $anlp-heading-font;
+  color: $anlp-muted;
+}
+.reveal .slide-number {
+  font-family: $anlp-heading-font;
+}
