@@ -35,7 +35,9 @@ $light-bg-text-color: $anlp-ink;
 $light-bg-link-color: $anlp-accent;
 $light-bg-code-color: #0B5F5E;
 
-$font-family-sans-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+// The inner quotes survive compilation; unquoted, "Source Serif 4" is invalid CSS
+// (a family name token cannot be a bare number) and the browser falls back to Times.
+$font-family-sans-serif: "'Source Serif 4'", Georgia, "'Times New Roman'", serif;
 $font-family-monospace: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
 // 32px body on a 1280×720 slide; tables drop to ~24px, never lower.
