@@ -213,6 +213,13 @@ $border-color: $anlp-border;
 .reveal .slide .column + .column {
   padding-left: 1em;
 }
+// A full-width table inside a column would otherwise keep its 8px left margin
+// and end past the slide edge (measured on the chapter 2 IDF slide).
+.reveal .slide .column table {
+  margin-left: 0;
+  margin-right: 0;
+  max-width: 100%;
+}
 .reveal .slide .compact {
   font-size: 0.9em;
 }
