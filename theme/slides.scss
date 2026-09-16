@@ -213,12 +213,13 @@ $border-color: $anlp-border;
 .reveal .slide .column + .column {
   padding-left: 1em;
 }
-// A full-width table inside a column would otherwise keep its 8px left margin
-// and end past the slide edge (measured on the chapter 2 IDF slide).
-.reveal .slide .column table {
-  margin-left: 0;
-  margin-right: 0;
-  max-width: 100%;
+// Quarto gives every block in a column side margins (0.25rem each, or 0.5rem
+// on the left of the last column), and a table is width: 100% on top of that,
+// so it ended 8px past the slide edge. Subtract the margins from the width.
+// The selectors must out-rank Quarto's `.columns > .column:last-child > :not()`.
+.reveal .slide .columns > .column > table,
+.reveal .slide .columns > .column:last-child > table {
+  width: calc(100% - 0.5rem);
 }
 .reveal .slide .compact {
   font-size: 0.9em;
