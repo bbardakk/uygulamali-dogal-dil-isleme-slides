@@ -482,7 +482,7 @@ yaklaşık 60 milyar tane üretir.
 İndirdiğiniz vektörler W'nin satırlarıdır.
 :::
 
-## Negatif örnekleme bir lojistik regresyondur
+## Negatif örnekleme bir lojistik regresyondur {.smaller}
 
 - 400.000 kelimelik bir sözlük üzerinde, milyarlarca çiftin her biri için softmax: umutsuz bir iş
 - Bunun yerine sorun: [bu, derlemden gelen *gerçek* bir çift mi, yoksa benim uydurduğum bir çift mi?]{.hl} Her gerçek çift için bir gürültü dağılımından $K$ sahte çekin, 0 olarak etiketleyin
@@ -1530,7 +1530,7 @@ fazla veri ve sıralamanın tersine döndüğü noktayı bulan bir öğrenme eğ
 "Embedding'ler saymayı yenemedi" cümlesini o zamana kadar bir hipotez olarak görün.
 :::
 
-## Bu fikir gerçekte nerede yayında
+## Bu fikir gerçekte nerede yayında {.smaller}
 
 - **Airbnb arama sıralaması** — tıklama oturumları üzerinde skip-gram ile ilan embedding'leri: oturum = cümle, ilan = kelime, rezerve edilen ilan global bağlam (Grbovic & Cheng 2018)
 - **YouTube önerileri** — video ve arama token'ı embedding'leri bir kullanıcı vektörüne ortalanıp derin bir aday üreticiye beslenir (Covington vd. 2016)
@@ -1556,7 +1556,7 @@ koordinat olarak metin, kosinüsle karşılaştırma — 20. bölüm (Erişimle 
 Üretim).
 :::
 
-## Statik embedding'lerin yapamadıkları
+## Statik embedding'lerin yapamadıkları {.smaller}
 
 | kısıt                        | bu bölümdeki kanıt                                  | şununla çözülür                 |
 |:-------------------------|:---------------------------------------------|:-----------------------------|

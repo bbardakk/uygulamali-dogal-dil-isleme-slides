@@ -485,7 +485,7 @@ billion of these.
 The vectors you download are the rows of W.
 :::
 
-## Negative sampling is a logistic regression
+## Negative sampling is a logistic regression {.smaller}
 
 - A softmax over a 400,000-word vocabulary, for every one of billions of pairs, is hopeless
 - Ask instead: [is this a *real* pair from the corpus, or one I made up?]{.hl} For each real pair, draw $K$ fakes from a noise distribution and label them 0
@@ -1539,7 +1539,7 @@ ordering flips. Treat "embeddings did not beat counting" as a hypothesis until
 then.
 :::
 
-## Where this is actually deployed
+## Where this is actually deployed {.smaller}
 
 - **Airbnb search ranking** — listing embeddings from skip-gram on click sessions: session = sentence, listing = word, the booked listing as global context (Grbovic & Cheng 2018)
 - **YouTube recommendations** — video and search-token embeddings averaged into a user vector, fed to a deep candidate generator (Covington et al. 2016)
@@ -1565,7 +1565,7 @@ routing. Retrieval: text as coordinates, compared by cosine — Chapter 20
 (Retrieval-Augmented Generation).
 :::
 
-## What static embeddings cannot do
+## What static embeddings cannot do {.smaller}
 
 | limitation                   | evidence from this chapter                          | fixed by                        |
 |:-------------------------|:---------------------------------------------|:-----------------------------|
