@@ -92,7 +92,7 @@ word, sometimes punctuation. When a vendor charges "per token", this is the
 thing being counted.
 :::
 
-## The normalization ladder
+## The normalization ladder {.smaller}
 
 | Step | [What it buys you]{.pro} | [What it costs you]{.con} | Default |
 |:--|:--|:--|:--|
@@ -168,7 +168,7 @@ depends entirely on the task.
 
 :::: {.columns}
 
-::: {.column width="40%"}
+::: {.column width="35%"}
 1. Start with characters
 2. Count every adjacent pair
 3. Merge the most frequent pair into a new symbol
@@ -179,7 +179,7 @@ Toy corpus: `low` ×5, `lower` ×2, `newest` ×6, `widest` ×3
 [Nobody told it that English has suffixes.]{.hl} It counted.
 :::
 
-::: {.column width="60%"}
+::: {.column width="65%"}
 ```text
 merge  1: 'e' + 's' -> 'es'  (seen 9 times)
 merge  2: 'es' + 't' -> 'est'  (seen 9 times)
@@ -355,7 +355,7 @@ and BPE sets that knob using the statistics of the data rather than a human's
 guess. The quadratic cost is Chapter 7's (Transformers and Attention).
 :::
 
-## Three granularities, side by side
+## Three granularities, side by side {.smaller}
 
 | | Characters | Subwords (BPE, WordPiece, Unigram) | Whole words |
 |:--|:--|:--|:--|
@@ -754,13 +754,13 @@ $$\mathrm{idf}(t) = \ln\!\left(\frac{1 + n}{1 + \mathrm{df}(t)}\right) + 1$$
 
 :::: {.columns}
 
-::: {.column .compact width="52%"}
+::: {.column .compact width="47%"}
 - $n = 4$. `pump` is in 2 documents: $\ln\frac{5}{3} + 1 = 1.511$
 - `the` is in all 4: $\ln\frac{5}{5} + 1 = 1$ — [down-weighted, not deleted]{.hl}
 - The $1+$ terms act as one extra document containing every term once
 :::
 
-::: {.column width="48%"}
+::: {.column width="53%"}
 | On 20 Newsgroups | df | df/N | idf |
 |:--|--:|--:|--:|
 | `the` | 9,477 | 0.838 | 1.18 |
@@ -1183,7 +1183,7 @@ chapter.
 Search ranking gets its own slide next.
 :::
 
-## BM25 — and why both its knobs are already familiar
+## BM25 — and why both its knobs are already familiar {.smaller}
 
 $$\mathrm{BM25}(q, d) = \sum_{t \in q} \mathrm{idf}(t) \cdot \frac{c(t,d)\,(k_1 + 1)}{c(t,d) + k_1\!\left(1 - b + b\,\frac{|d|}{\mathrm{avgdl}}\right)}$$
 

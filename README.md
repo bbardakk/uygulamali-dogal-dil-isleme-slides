@@ -33,6 +33,8 @@ chapter list from the book repository on GitHub and fails if a deck has no match
 | chapter | English | Türkçe |
 |:--|:--|:--|
 | 01 Why NLP, Why Now | [deck](en/chapters/01-why-nlp-now.qmd) | [sunum](tr/chapters/01-neden-nlp.qmd) |
+| 02 Text as Data | [deck](en/chapters/02-text-as-data.qmd) | [sunum](tr/chapters/02-metin-veri.qmd) |
+| 03 Embeddings | [deck](en/chapters/03-embeddings.qmd) | [sunum](tr/chapters/03-gommeler.qmd) |
 
 ## Rendering
 

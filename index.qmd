@@ -17,12 +17,16 @@ açıkken konuşmacı notları için **S**, tam ekran için **F**, slayt görün
 | Chapter                | Deck                                     |
 |:-----------------------|:-----------------------------------------|
 | 1 · Why NLP, Why Now   | [Slides](en/chapters/01-why-nlp-now.html) |
+| 2 · Text as Data       | [Slides](en/chapters/02-text-as-data.html) |
+| 3 · Embeddings         | [Slides](en/chapters/03-embeddings.html) |
 
 ## Türkçe
 
 | Bölüm                          | Sunum                                    |
 |:-------------------------------|:-----------------------------------------|
 | 1 · NLP: Neden ve Neden Şimdi  | [Slaytlar](tr/chapters/01-neden-nlp.html) |
+| 2 · Veri Olarak Metin          | [Slaytlar](tr/chapters/02-metin-veri.html) |
+| 3 · Embedding'ler              | [Slaytlar](tr/chapters/03-gommeler.html) |
 
 ## The book and the notebooks · Kitap ve notebook'lar
 

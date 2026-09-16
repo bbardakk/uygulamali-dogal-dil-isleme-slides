@@ -967,7 +967,7 @@ NLP projeniz gecikti. Zaman gerçekte nereye gitti?
 ::: {.notes}
 Model işin kolay kısmı hâline geldi.
 
-5. bölüm (Veri, Etiketleme ve Referans Etiketler) bunun üzerine koca bir bölüm.
+5\. bölüm (Veri, Etiketleme ve Referans Etiketler) bunun üzerine koca bir bölüm.
 Merkezî ölçümü, iki farklı etiketleme koşulu arasında bir karşılaştırma;
 yayımlanmış sonuçların söylemeden yaptığı karşılaştırmanın ta kendisi.
 

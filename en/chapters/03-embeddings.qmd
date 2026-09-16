@@ -1,0 +1,1859 @@
+---
+title: "Embeddings: Words as Coordinates"
+subtitle: "Chapter 3 · Applied Natural Language Processing"
+author: "Dr. Batuhan Bardak"
+lang: en
+---
+
+## After this lecture you can
+
+- turn the distributional hypothesis into a matrix, reweight it with PPMI and compress it with truncated SVD
+- write skip-gram with negative sampling from scratch and explain it as a logistic regression
+- choose between word2vec, GloVe, fastText and doc2vec for a stated problem, and defend it
+- diagnose three defects of the space: anisotropy, frequency in the vector, and cosine confusing "mentioned together" with "means the same"
+- state precisely what a static embedding cannot do — which is what Ch. 7 exists to fix
+
+::: {.notes}
+The chapter's seven learning objectives, condensed to five. In full: explain the
+distributional hypothesis and turn it into a matrix, then into coordinates;
+reweight co-occurrence counts with PPMI, the score for how much more often two
+words land together than chance predicts; compress the result with truncated
+SVD, the method that keeps a table's strongest patterns and drops the rest, and
+say what each step fixes; write skip-gram with negative sampling from scratch
+and explain it as a logistic regression; choose between word2vec, GloVe,
+fastText and doc2vec and defend it; diagnose three defects of the space —
+vectors sharing a common direction (anisotropy), a vector recording frequency as
+much as meaning, and cosine failing to separate "mentioned together" from "means
+the same thing"; and state precisely what a static embedding cannot do, which is
+exactly what Chapter 7 (Transformers and Attention) exists to fix.
+
+The route: we build the space twice. First by counting, because that version can
+be checked by hand and every number is small enough to print. Then by
+predicting, which is word2vec — from scratch, gradients included — before
+showing that the two routes were the same route all along. After that: what the
+space is good at, the defects it hides, and the one thing it cannot do at all.
+
+This is a dense chapter. If it runs over two sessions, the natural break is
+after "Where the −log K comes from".
+:::
+
+## The problem, in one sentence
+
+- Ch. 2 built document vectors that work — and word vectors that do not
+- Every word was a one-hot column: `pump`, `pumps` and `impeller` are three orthogonal directions, as unrelated as `pump` and `Wednesday`
+- Cosine between any two distinct words: exactly zero. By construction. Always
+- Train on *the pump failed*, test on *the pumps failed*: what the model learned about `pump` sits on a coordinate the test sentence never touches
+
+::: {.takeaway}
+The whole fix is one idea: [replace the identity matrix with a learned one]{.hl}. Give every word 100 or 300 numbers, placed so that words used alike sit close. That list is an **embedding**.
+:::
+
+::: {.notes}
+Chapter 2 (Text as Data) ended in an uncomfortable place. How bad is the one-hot
+problem? Bad enough that the model cannot generalise across word forms at all.
+The two sentences do share `the` and `failed`, so something transfers — but
+everything the model learned about `pump` specifically is filed under a
+coordinate the second sentence never touches.
+
+Instead of giving each word its own axis, give it a short list of numbers —
+100 of them, or 300 — positioned so that words used in similar ways end up near
+each other. Think of it as giving every word a set of map coordinates.
+
+For the statisticians in the room: one-hot encoding is a saturated model with
+one parameter per category and no pooling. An embedding is the same model with a
+low-rank constraint, which is a form of partial pooling. Words that behave alike
+are forced to share parameters, and that sharing *is* the generalisation.
+:::
+
+## The distributional hypothesis
+
+::: {.lede}
+*"You shall know a word by the company it keeps."* — J.R. Firth, 1957
+:::
+
+- Harris (1954) had already made the operational version: meaning can be recovered from the distribution of contexts a word appears in
+- Words that fill the same slots — *the ___ failed*, *replaced the ___*, *___ pressure* — mean something similar
+- [A bet, not a theorem]{.hl}: extraordinarily good for topical and functional similarity; it fails for antonyms, because *hot* and *cold* keep almost identical company
+- It needs no labels. Raw text is the supervision
+
+::: {.takeaway}
+That is why embeddings were the first place in NLP where more data reliably beat more cleverness.
+:::
+
+::: {.notes}
+Firth (1957) was making a point about linguistic method; Zellig Harris (1954)
+had already made the operational version of it.
+
+Put concretely: if two words appear in the same slots, then whatever they mean,
+they mean something similar.
+
+Is that true? Not quite, and it is worth being clear it is a bet rather than a
+theorem. Later in the lecture we watch it fail with real numbers:
+`increase`/`decrease` at a cosine of 0.881.
+
+But it has one property that made the entire field possible: it needs no
+labels.
+:::
+
+## Count first: co-occurrence, PPMI, SVD
+
+:::: {.columns}
+
+::: {.column width="40%"}
+### Ten sentences
+
+```python
+corpus = [
+    "the king rules the castle",
+    "the queen rules the castle",
+    "the king eats an apple",
+    "the queen eats a banana",
+    "the royal castle is grand",
+    "a banana is sweet fruit",
+    "an apple is sweet fruit",
+    "the man eats an apple",
+    "the woman eats a banana",
+    "the king and queen are royal",
+]
+```
+:::
+
+::: {.column width="60%"}
+### Step 1 · count within ±2 tokens
+
+|          | eats | rules | royal | sweet | the |
+|:---------|-----:|------:|------:|------:|----:|
+| `king`   | 1    | 1     | 0     | 0     | 4   |
+| `queen`  | 1    | 1     | 1     | 0     | 3   |
+| `apple`  | 2    | 0     | 0     | 1     | 0   |
+| `banana` | 2    | 0     | 0     | 1     | 0   |
+
+- `king` ≈ `queen` and `apple` ≈ `banana`: the hypothesis already working
+- The largest number in the `king` row is `the`. [Raw counts measure opportunity, not association.]{.hl}
+:::
+
+::::
+
+::: {.notes}
+Before word2vec there was a recipe with three steps: count what appears near
+what, reweight the counts so common words stop dominating, then factorize. We do
+all three by hand — partly because it makes everything later much less
+mysterious, and partly because Levy and Goldberg (2014) showed that word2vec is
+quietly doing the same thing anyway.
+
+The corpus has 10 sentences and a vocabulary of 19 words.
+
+Step 1: the context of a word is a window around it. Window 2 means two tokens
+to the left and two to the right. Slide it over every position and add one to
+the cell for every (word, neighbour) pair you see. The rows of this matrix *are*
+word vectors — 19-dimensional ones — and unlike one-hots they are not
+orthogonal. (The `castle` column is all zeros for these four rows, so it is
+left off the slide.)
+
+But they have Chapter 2's disease. Total co-occurrences: `the` 22, `eats` 16,
+`is` 11, `queen` 10, `king` 9, `a` 8. The largest number in the `king` row is
+`the`, which tells you nothing about kings.
+:::
+
+## Step 2 · PMI is observed ÷ expected
+
+$$\mathrm{PMI}(w, c) = \log \frac{P(w, c)}{P(w)\,P(c)}$$
+
+- **Ratio 1**: the words co-occur exactly as chance predicts — no relationship, PMI 0
+- **Above 1**: they *attract*, positive. **Below 1**: they *avoid* each other, negative
+- The negative side is notoriously unreliable: showing that words co-occur *less* than chance takes far more data
+- So clip at zero, and call it [positive PMI]{.hl}:
+
+$$\mathrm{PPMI}(w, c) = \max\!\left(0,\ \log \frac{c_{wc}\, N}{c_{w\ast}\, c_{\ast c}}\right)$$
+
+::: {.notes}
+We want to ask: do these two words co-occur more often than chance would
+predict? Pointwise mutual information asks exactly that. It measures surprise,
+not popularity.
+
+Read the fraction like this: the denominator is how often we would *expect* the
+two words to land next to each other if they were placed completely
+independently; the numerator is how often they actually do. So PMI is nothing
+but the log of observed ÷ expected.
+
+In the PPMI formula, c_wc is how often the pair occurred, c_w* is the row total,
+c_*c the column total, and N the grand total of the matrix.
+
+PPMI and IDF are the same instinct applied at different levels. IDF asks how
+surprising a word is in a document; PMI asks how surprising a word is next to
+another word. Both divide an observed frequency by an expected one and take a
+log. The section heading in the chapter calls PPMI "IDF's smarter cousin".
+:::
+
+## Work one cell by hand
+
+::: {.lede}
+All four numbers come from $C$: pair count $c_{wc}$, row total $c_{w\ast}$, column total $c_{\ast c}$, and $N = 144$ — every (word, neighbour) *pair*, not the 51 tokens.
+:::
+
+::: {.roomy}
+| pair            | observed | expected                     | ratio | PMI      |
+|:----------------|---------:|:-----------------------------|------:|---------:|
+| `apple`–`sweet` | 1        | $7 \times 6 / 144 = 0.29$    | 3.43  | **1.23** |
+| `king`–`the`    | 4        | $9 \times 22 / 144 = 1.38$   | 2.91  | **1.07** |
+:::
+
+- [The pair seen once scores higher than the pair seen four times.]{.hl} `the` is everywhere, so most of those four meetings were expected
+- In the PPMI matrix `apple`–`sweet` goes from the smallest non-zero count in its row to its *largest* value, 1.23
+
+::: {.notes}
+Where the numbers come from. c_wc = 1: how many times `apple` and `sweet` landed
+in each other's window. c_w* = 7: the sum of the `apple` row. `apple` occurs three
+times in the corpus, with 2, 3 and 2 neighbours: 2 + 3 + 2 = 7. c_*c = 6: the same
+sum down the `sweet` column. N = 144: the sum of every cell. Each token
+contributes one pair per neighbour in its window — 4 in the middle of a
+sentence, 2 or 3 at the edges — so a five-token sentence yields 14 pairs. Nine
+five-token sentences and one six-token sentence (18 pairs): 9 × 14 + 18 = 144.
+
+N is the number of pairs, not tokens, because the denominator of PMI is a
+product of probabilities: the thing to divide by is how many pairs were counted.
+
+If the two words were sprinkled independently we would expect 7 × 6 / 144 = 0.29
+meetings. We observed 1, which is 3.43 times more. log 3.43 = 1.23.
+
+`king`–`the` occurs four times — four times as often as `apple`–`sweet`. But `the`
+has a column total of 22 and `king` a row total of 9, so by chance alone we
+expect 1.38. The single meeting between `apple` and `sweet` is not explained by
+anything. That reversal is the entire point of the formula.
+
+The chapter's analogy: at a crowded party, someone who talks to everyone tells
+you nothing when you see them with the guest of honour. Someone who talks to
+only three people all evening, one of them the guest of honour, tells you a
+great deal.
+
+PPMI rows for the same cells: `king` has `rules` 0.69 and `the` 1.07; `queen`
+has `rules` 0.59, `royal` 1.06, `the` 0.67; `apple` and `banana` each have `eats`
+0.94 and `sweet` 1.23. The count for `apple`–`sweet` was small because `sweet`
+is rare, and PPMI divides that out.
+:::
+
+## Quick check · PPMI {.question}
+
+::: {.ask}
+Two words each occur 10 times in a million-token corpus and never co-occur. Why clip their negative PMI instead of keeping it?
+:::
+
+::: {.fragment}
+- Expected co-occurrence under independence is about 0.0002, so observing zero is completely unsurprising — no evidence the words avoid each other
+- But $\log 0 = -\infty$, and even smoothed it is a large negative number that dominates the vector
+- Negative PMI is sampling noise for exactly the words you have least data about — [which is most of them]{.hl}
+- Clipping is a crude but effective admission that we cannot estimate them, and it keeps the matrix sparse
+:::
+
+::: {.notes}
+Give the room a minute, then reveal (one click).
+
+The side effect worth adding: Levy, Goldberg and Dagan (2015) found that tuned
+PPMI is competitive with word2vec on most benchmarks — the gap people attributed
+to neural networks was largely a gap in hyperparameter care. We come back to
+that paper several times today.
+:::
+
+## Step 3 · Truncated SVD keeps what repeats
+
+- The PPMI rows already behave: `king` → `queen` 0.55. But `apple` → `man` 0.79, because of one shared sentence, *the man eats an apple*
+- Sparse count vectors are brittle exactly where data is thin. Keep only the $d$ directions with the largest singular values:
+
+$$\mathrm{PPMI} \approx U_d \Sigma_d V_d^\top, \qquad \text{embedding} = U_d \Sigma_d$$
+
+- Here five of nineteen directions hold 65.4% of the sum of squares — not of variance, since PPMI is never centred
+- Dropping the faint directions is not a regrettable loss of information: [it is the mechanism]{.hl}
+
+::: {.notes}
+Nearest neighbours before factorization, PPMI rows in 19 dimensions: `king` →
+queen 0.55, are 0.55, man 0.45, the 0.37; `apple` → man 0.79, fruit 0.52,
+banana 0.40, is 0.31. `king` → `queen` is right. `apple` → `man` is not: a single
+shared sentence in a ten-sentence corpus is enough to fake an association.
+
+The picture behind the notation. Think of the PPMI matrix as a stack of
+transparencies. Each one shows a single recurring pattern — these words tend to
+sit near those words — printed at a different darkness. Stack all 19 and you
+reproduce the matrix exactly. The singular values are the darknesses, sorted
+from boldest to faintest; U says how much each word participates in each
+pattern. Truncating to d keeps only the boldest few. The faint ones are where a
+coincidence lives: a pattern one sentence created and nothing else confirms.
+Forcing 19 columns of evidence through 5 numbers means the model can only afford
+to store what repeats. Same bargain as a low bit-rate audio file: when the budget
+is tight enough, hiss is the first thing to disappear.
+
+Singular values: 5.75, 4.76, 4.03, 3.71, 3.64, 3.08, 3.03, 2.80. The first two
+dimensions hold 36.8% of the sum of squares, the first five 65.4%. These are
+shares of the total sum of squares, not variance shares; the two coincide only
+after centring.
+
+A production warning. Multiplying by Σ is the textbook choice and, on the
+evidence, the wrong default. Levy, Goldberg and Dagan (2015) swept W = U_d Σ_d^p
+and found p = 0.5 — often even p = 0 — beating p = 1 by up to fifteen points on
+similarity benchmarks. Σ loads the dominant direction most heavily, and that
+direction is largely frequency — the anisotropy we measure later as a defect. We
+keep p = 1 here because it keeps the arithmetic visible; in production, sweep p.
+:::
+
+## What the compression actually did
+
+| word pair          | PPMI rows, 19-D | SVD, 5-D | what happened                                                   |
+|:-------------------|----------------:|---------:|:----------------------------------------------------------------|
+| `apple` – `banana` | 0.40            | **1.00** | never share a sentence; shared contexts link them, and compression makes the link decisive |
+| `king` – `queen`   | 0.55            | **0.90** | already right, and got stronger                                  |
+| `apple` – `man`    | 0.79            | **0.85** | the one-sentence accident — *not* deleted, but no longer first  |
+
+::: {.takeaway}
+SVD does not break the wrong link; it strengthens the right one enough to overtake it. [The ordering improves; the absolute values do not.]{.hl}
+:::
+
+::: {.src}
+Deerwester et al. 1990 — latent semantic analysis, more than twenty years before word2vec
+:::
+
+::: {.notes}
+Look at the third row, because this step is usually described wrongly. SVD does
+not delete the `apple`–`man` accident: that cosine rises from 0.79 to 0.85. What
+changes is the ranking. Before, `apple`'s nearest neighbour was `man` with
+`banana` third; now `banana` is first and `man` third. That is what "preferring
+signal over noise" actually looks like.
+
+The number to watch is the first row. `apple` and `banana` never once occur in
+the same sentence, so nothing links them directly. What links them is that they
+keep the same company — both follow `eats`, both precede `is sweet fruit`. The raw
+PPMI rows already register that as 0.40, because shared contexts are shared
+coordinates; the compression strengthens it to 1.00, enough to reorder the
+neighbour list. Call this shared-context generalisation rather than transitivity
+— cosine is not a transitive relation — and note that low-rank compression makes
+it decisive rather than visible.
+
+Other neighbours after SVD to 5 dimensions: `king` → queen 0.90, are 0.88;
+`eats` → an 0.95, a 0.95; `castle` → are 0.82, is 0.80.
+
+This is latent semantic analysis (Deerwester et al. 1990).
+:::
+
+## Ten sentences, two coordinates
+
+:::: {.columns}
+
+::: {.column width="58%"}
+```{=html}
+<svg viewBox="0 0 560 420" role="img" aria-label="Twelve toy-corpus words placed by SVD dimensions 2 and 3: royalty on the left, food on the right, people in between." style="width:100%; max-height:460px; font-family:'Space Grotesk', sans-serif;">
+  <rect x="50" y="20" width="490" height="360" fill="#FFFFFF" stroke="#E3E7EC"/>
+  <line x1="295" y1="20" x2="295" y2="380" stroke="#B7BDC7" stroke-width="1"/>
+  <line x1="50" y1="212.6" x2="540" y2="212.6" stroke="#B7BDC7" stroke-width="1"/>
+  <text x="295" y="408" text-anchor="middle" font-size="16" fill="#5B6272">dimension 2</text>
+  <text x="24" y="200" text-anchor="middle" font-size="16" fill="#5B6272" transform="rotate(-90 24 200)">dimension 3</text>
+  <circle cx="418" cy="40" r="6" fill="#0E7C7B"/><text x="430" y="45" font-size="16" fill="#1A1F33">royalty</text>
+  <circle cx="418" cy="63" r="6" fill="#C1666B"/><text x="430" y="68" font-size="16" fill="#1A1F33">people</text>
+  <circle cx="418" cy="86" r="6" fill="#5B6272"/><text x="430" y="91" font-size="16" fill="#1A1F33">food</text>
+  <g fill="#0E7C7B">
+    <circle cx="198.9" cy="268.4" r="6"/><circle cx="110.1" cy="239.4" r="6"/>
+    <circle cx="159.3" cy="55.9" r="6"/><circle cx="257.2" cy="337.2" r="6"/>
+    <circle cx="225.6" cy="155.6" r="6"/>
+  </g>
+  <g fill="#C1666B">
+    <circle cx="329.1" cy="226.8" r="6"/><circle cx="324.1" cy="222.2" r="6"/>
+  </g>
+  <g fill="#5B6272">
+    <circle cx="414.7" cy="213.8" r="6"/><circle cx="409.1" cy="208.5" r="6"/>
+    <circle cx="456.9" cy="169.5" r="6"/><circle cx="488.1" cy="200.2" r="6"/>
+    <circle cx="372.1" cy="218.4" r="6"/>
+  </g>
+  <g font-family="'JetBrains Mono', monospace" font-size="15" fill="#1A1F33" text-anchor="middle">
+    <text x="198.9" y="255">king</text>
+    <text x="110.1" y="226">queen</text>
+    <text x="159.3" y="43">royal</text>
+    <text x="257.2" y="324">castle</text>
+    <text x="225.6" y="143">rules</text>
+    <text x="336" y="248">man</text>
+    <text x="314" y="207">woman</text>
+    <text x="372.1" y="239">eats</text>
+    <text x="421" y="234">apple</text>
+    <text x="405" y="195">banana</text>
+    <text x="456.9" y="156">fruit</text>
+    <text x="494" y="186">sweet</text>
+  </g>
+</svg>
+```
+:::
+
+::: {.column width="42%" .compact}
+- Royalty on the left, food on the right, people in between — [from ten sentences and nothing else]{.hl}
+- `man` and `woman` land almost on top of each other: in this corpus they are used identically
+- Why dimensions 2 and 3? Every word has a *negative* first coordinate — a common direction that separates nothing
+- Real spaces have the same defect at scale: **anisotropy**, measured on GloVe later
+:::
+
+::::
+
+::: {.notes}
+A static snapshot of the chapter's interactive plot: the SVD coordinates of the
+toy corpus, dimensions 2 and 3.
+
+The warning box in the chapter: a dimension that all words share the sign of
+cannot separate any of them — it is a common direction, not a contrastive one.
+Plotting dimensions 1 and 2 would waste half the picture.
+
+Read the compression printout with that in mind: in two dimensions `king` vs
+`queen` has a cosine of 0.996 and `king` vs `banana` 0.141. In a space where
+every word shares the sign of the first coordinate, a high cosine is partly the
+shared direction talking, not the similarity. And any two one-hots: cosine 0.00,
+always.
+:::
+
+## From counting to predicting
+
+- Why abandon counting? Not accuracy. The matrix is vocabulary × vocabulary: ten billion *possible* cells at 100,000 words — one monolithic artifact to build before you can factorize
+- word2vec (Mikolov et al. 2013): never build the matrix. Train a classifier to *predict* context, then throw the classifier away and keep its weights
+- A shallow network: one-hot input → hidden layer = the row of $\mathbf{W}$ for that word, a lookup with no activation → output $\mathbf{W}'$ scores candidate words
+- When training ends, $\mathbf{W}'$ is discarded and $\mathbf{W}$ kept: one row per word
+
+::: {.takeaway}
+[The product is not the network you train; it is the weights of its first layer.]{.hl} The embedding table at the bottom of a transformer (Ch. 7) is literally the same object.
+:::
+
+::: {.notes}
+So counting works: royalty landed on one side and food on the other. Why did the
+field move on? One reason, and it is not accuracy. Sparse storage keeps only
+the non-zeros, but the co-occurrence matrix is still one monolithic artifact you
+have to build before you can factorize anything. The alternative is to never
+build it, and learn the vectors by asking the model to predict.
+
+The three layers. The input layer is a one-hot vector as long as the
+vocabulary. The hidden layer multiplies it by W, and multiplying a one-hot by a
+matrix does nothing except pull out that word's row — so the hidden layer is
+really a lookup table, often called a projection layer. It is called shallow
+because there is only one hidden layer and it carries no activation function.
+The output layer is a second matrix, W′, which scores the hidden vector against
+candidate words.
+
+The model was a pretext; the weights were the point. 300 numbers per row in the
+usual setting.
+
+Two matrices are learned: v for words as centres, u for words as contexts.
+Almost everyone keeps v and discards u. Adding them sometimes helps a little;
+GloVe's authors recommend it (Pennington et al. 2014).
+:::
+
+## CBOW and skip-gram: arrows reversed
+
+::: {.lede}
+One window of *the pump failed during the night shift*: centre `failed`, width 2.
+:::
+
+:::: {.columns}
+
+::: {.column width="50%"}
+### CBOW · context → centre
+
+[the]{.chip} [pump]{.chip} [during]{.chip} [the]{.chip} → average → `failed`
+
+- One training example per window
+- Faster; the average blurs rare words
+:::
+
+::: {.column width="50%"}
+### Skip-gram · centre → context
+
+`failed` → its own vector → [the]{.chip} [pump]{.chip} [during]{.chip} [the]{.chip}
+
+- Four training examples per window
+- Slower; much better on rare words
+:::
+
+::::
+
+::: {.takeaway}
+Both learn $\mathbf{W}$ (word → vector) and $\mathbf{W}'$ (scores partners), and both throw $\mathbf{W}'$ away. [Skip-gram is the variant that won]{.hl}; the rest of the chapter uses it.
+:::
+
+::: {.notes}
+A static version of the chapter's two-architecture figure. CBOW averages the
+surrounding words and predicts the centre. Skip-gram takes the centre word and
+predicts each surrounding word in turn.
+
+Slide a window over the corpus and every position yields training examples. For
+skip-gram with centre `failed`, the pairs are (failed, the), (failed, pump),
+(failed, during), (failed, the). The book's interactive version lets students
+type a sentence and move the centre and window.
+
+This is the entire supervision signal. No labels, no annotation — just the text,
+cut into pairs. A corpus of 6 billion tokens with window 5 yields about 60
+billion of these.
+
+The vectors you download are the rows of W.
+:::
+
+## Negative sampling is a logistic regression
+
+- A softmax over a 400,000-word vocabulary, for every one of billions of pairs, is hopeless
+- Ask instead: [is this a *real* pair from the corpus, or one I made up?]{.hl} For each real pair, draw $K$ fakes from a noise distribution and label them 0
+
+$$P(\text{real} \mid w, c) = \sigma(\mathbf{v}_w \cdot \mathbf{u}_c), \qquad \sigma(z) = \frac{1}{1 + e^{-z}}$$
+
+$$\mathcal{L} = -\log \sigma(\mathbf{v}_w \cdot \mathbf{u}_c) - \sum_{k=1}^{K} \log \sigma(-\mathbf{v}_w \cdot \mathbf{u}_{n_k})$$
+
+- One term pulls together, $K$ terms push apart. Nothing else is happening
+- With $K = 5$: six dot products per pair instead of 400,000, no normalisation — roughly 67,000 times cheaper
+
+::: {.src}
+Mikolov et al. 2013
+:::
+
+::: {.notes}
+There is one problem left, and it is a bad one. To turn a score into a
+probability you normalise over the whole vocabulary, for every training pair.
+That is not a training run anybody finishes.
+
+The fix is almost embarrassingly simple, and it is the reason word2vec was
+practical: replace it with a question a statistician recognises instantly. That
+is binary classification — a logistic regression whose linear predictor is the
+dot product of the two words' vectors — minimising the usual log loss.
+
+Read the loss in two halves. The first term is small when σ(v·u) is close to 1,
+so it pays you for giving real pairs a large dot product. The second is small
+when the dot product with each fake partner is very negative.
+
+The chapter's figure: the full softmax asks "which of 400,000 words comes next?"
+— one question with 400,000 answers. Negative sampling asks "is this pair
+real?" six times — six questions with two answers each (the true partner `pump`,
+fakes such as `opera`, `zinc`, `tariff`, `carbon`, `helix`).
+
+The book's loss widget: training pushes the dot product of real pairs to the
+right and fake pairs to the left. Since the dot product of two unit-length
+vectors is their cosine, "similar words have similar vectors" is not an emergent
+property — it is literally the loss function.
+
+"Shallow neural network" and "logistic regression" are not competing
+explanations: a single linear layer with no activation, followed by a sigmoid
+and a log loss, is by definition a logistic regression. Reach for the first to
+describe the architecture, the second to compute the gradient. If you have ever
+fitted a logistic regression, you have fitted 99% of word2vec. The only unusual
+part is that both the predictors and the coefficients are learned, which makes it
+a factorization rather than a regression.
+:::
+
+## Work one update by hand
+
+::: {.lede}
+Four dimensions instead of 300. Centre `failed`: $\mathbf{v} = (0.4,\ -0.2,\ 0.7,\ 0.1)$. True partner `pump`: $\mathbf{u} = (0.5,\ 0.1,\ 0.6,\ -0.3)$. Sampled fake `opera`: $\mathbf{u} = (-0.3,\ 0.6,\ -0.2,\ 0.4)$.
+:::
+
+::: {.roomy}
+| pair             | $y$ | $\mathbf{v} \cdot \mathbf{u}$ | $\sigma(\mathbf{v} \cdot \mathbf{u})$ | loss  | $\sigma - y$ |
+|:-----------------|----:|------------------------------:|--------------------------------------:|------:|-------------:|
+| `failed`–`pump`  | 1   | 0.57                          | 0.639                                 | 0.448 | −0.361       |
+| `failed`–`opera` | 0   | −0.34                         | 0.416                                 | 0.538 | 0.416        |
+:::
+
+- The derivative of the loss with respect to the dot product is $\sigma(\mathbf{v} \cdot \mathbf{u}) - y$: [prediction minus target]{.hl}, as in every logistic regression
+- Update only $\mathbf{v}$ at learning rate 0.05: `failed`·`pump` 0.570 → **0.590**; `failed`·`opera` −0.340 → −0.359
+- Update the context vectors too: 0.603 and −0.374 — same directions, about 1.6 times as far
+
+::: {.notes}
+For the real pair: (0.4)(0.5) + (−0.2)(0.1) + (0.7)(0.6) + (0.1)(−0.3) = 0.57, so
+σ(0.57) = 0.639 — the model currently gives this pair a 64% chance of being
+genuine — and its loss contribution is −log 0.639 = 0.448.
+
+For the fake pair the dot product is −0.34, giving σ(0.34) = 0.584 for "fake"
+and a loss of −log 0.584 = 0.538. The model is already leaning the right way on
+both, but not confidently, so both get nudged.
+
+For `pump`, 0.639 − 1 = −0.361: negative, so the dot product goes up. For `opera`,
+0.416 − 0 = 0.416: positive, so the dot product goes down.
+
+Holding the context vectors fixed, the gradient for v is the sum of both terms:
+(0.639 − 1)·u_pump + (0.416 − 0)·u_opera = (−0.305, 0.213, −0.300, 0.275). That
+is what `gv` in the training code computes in one einsum.
+
+These are tiny movements. Multiply them by tens of billions of pairs and you get
+the geometry that made these models famous: no cleverness, just an enormous
+number of very small corrections.
+:::
+
+## Only seven rows move
+
+$$\frac{\partial \mathcal{L}}{\partial \mathbf{v}_w} = \bigl(\sigma(z) - y\bigr)\,\mathbf{u}_c, \qquad \frac{\partial \mathcal{L}}{\partial \mathbf{u}_c} = \bigl(\sigma(z) - y\bigr)\,\mathbf{v}_w$$
+
+- Each vector is dragged along the other, by how wrong the prediction was. A pair already scored correctly barely moves
+- One pair with $K = 5$: one row of $\mathbf{W}$, plus $1 + K$ rows of $\mathbf{W}'$ — **seven rows**
+- Every other row entered no dot product, so its gradient is [exactly zero]{.hl} — not small
+- Our from-scratch model has 37,354 rows; seven is **0.019%**. A full softmax touches 18,678 per pair: **2,668 times** the arithmetic
+
+::: {.notes}
+The derivation, for students who want to see it fall out. Write z = v·u. The
+sigmoid has a tidy derivative, σ′(z) = σ(z)(1 − σ(z)). Differentiate −log σ(z)
+with the chain rule: −σ′(z)/σ(z) = σ(z) − 1. The σ(z) cancels, which is the
+whole reason log loss is paired with the sigmoid rather than, say, squared
+error. For a negative sample the term is −log σ(−z) and the same two lines give
+σ(z). Both collapse into σ(z) − y. One more chain-rule step, since ∂z/∂v = u,
+gives the two gradients on the slide.
+
+A pair the model already scores correctly produces a near-zero gradient; the
+learning concentrates on pairs it gets wrong. That self-limiting behaviour is
+why the method survives billions of updates without diverging.
+
+The count: the model we train from scratch has a vocabulary of 18,677, 100
+dimensions, two matrices — 37,354 rows and 3,735,400 parameters. One pair touches
+7 rows. That is why billions of updates finish in hours on one machine. With a
+full softmax the denominator sums over every word, so every output vector gets a
+non-zero gradient: 18,678 rows, half of all rows, for every pair.
+
+Practical consequence: the gradient of an embedding matrix is sparse. PyTorch's
+`nn.Embedding(..., sparse=True)` and the `SparseAdam` optimizer come straight out
+of this fact. And a word learns only as much as it occurs or gets drawn as a
+negative — another way to read why the 0.75 exponent on the next slide matters.
+:::
+
+## Two details that matter more than the architecture
+
+:::: {.columns}
+
+::: {.column width="52%"}
+### Subsampling frequent words
+
+| share of corpus  | example        | kept | discarded |
+|:-----------------|:---------------|-----:|----------:|
+| 5%               | `the`          | 0.16 | 84%       |
+| 1%               | `of`, `and`    | 0.42 | 58%       |
+| 0.1% ($= t$)     | mid-frequency  | 1.00 | 0%        |
+| 0.01% and below  | the tail       | 1.00 | 0%        |
+
+In our run: 26.6% of in-vocabulary tokens go, 6,397,826 → 4,698,743.
+:::
+
+::: {.column width="48%" .compact}
+### Negatives drawn from $f(w)^{0.75}$
+
+- A word 5,000 times more frequent is only about 595 times more likely to be drawn — the gap narrows about eightfold
+- A word learns only from being *contrasted*; the exponent buys the tail a share of the signal
+- Chosen empirically: 0.75 has no derivation
+:::
+
+::::
+
+::: {.takeaway}
+Levy et al. (2015) identified the exponent as one of the hyperparameters [doing much of the work people credited to the model]{.hl}.
+:::
+
+::: {.notes}
+Subsampling. `the` appears next to everything, so pairs containing it carry
+almost no information but make up a huge share of the data. word2vec keeps word w
+with probability min(1, (sqrt(f/t) + 1) · t/f), t ≈ 10⁻³. Any word below a
+thousandth of the corpus is always kept. This is the formula in word2vec's C
+source, which every implementation follows; the published paper states a
+different one, P(discard) = 1 − sqrt(t/f). The code is what was actually run — a
+small reminder to read the implementation, not only the paper.
+
+So this is not a gentle reweighting: it deletes five out of every six
+occurrences of `the`, and leaves the tail alone. Almost all of what it throws away
+in the run is `the`, `of`, `and` and their friends. (6,397,826 is what is left of
+6,794,527 tokens read once everything below min_count = 20 is dropped.)
+
+A second benefit: deleting a token widens the windows around it. With `the`
+removed, the words either side become neighbours — subsampling creates
+informative pairs, not only removes uninformative ones.
+
+The exponent. Raising probabilities to a power below 1 pulls the smallest ones
+up furthest in relative terms: 0.5^0.75 is 19% larger than 0.5, while
+0.001^0.75 is 5.6 times larger than 0.001. Renormalising moves mass from the
+head to the tail. 5000^0.75 ≈ 595. A word never drawn as a negative is never
+pushed away from anything, and its vector simply drifts.
+
+Levy, Goldberg and Dagan (2015) identify the exponent as one of the
+hyperparameters doing much of the work people were crediting to the model.
+:::
+
+## Writing it from scratch
+
+::: {.lede}
+About sixty lines of NumPy, no framework, trained on the first 40 million characters of `text8`. The heart of it:
+:::
+
+```python
+v = Wc[c]                                              # (B, D)
+u = Wo[targets]                                        # (B, K+1, D)
+score = sigmoid(np.einsum("bkd,bd->bk", u, v))         # (B, K+1)
+err = (score - labels).astype(np.float32)              # the residual
+gv = np.einsum("bk,bkd->bd", err, u)
+gu = err[:, :, None] * v[:, None, :]
+np.clip(gv, -1.0, 1.0, out=gv)
+np.clip(gu, -1.0, 1.0, out=gu)
+np.add.at(Wc, c, -lr * gv)
+np.add.at(Wo, targets.ravel(), (-lr * gu).reshape(-1, D))
+```
+
+::: {.takeaway}
+`err = score - labels` is predicted minus observed — [the residual of a logistic regression]{.hl}. After three epochs: `monday` → friday 0.87, `france` → spain 0.79, `physics` → mechanics 0.82.
+:::
+
+::: {.notes}
+The full listing is in the chapter: vocabulary with min_count 20 (18,677 words),
+subsampling, the 0.75 noise distribution, D = 100, K = 5, window 5, 3 epochs,
+learning rate 0.02, batches of 2,048. Every gradient below `err` is that residual
+times the other vector.
+
+Run: 6,794,527 tokens read; 4,698,743 after subsampling; 46,987,400 training
+pairs; loss 4.159 → 2.351; trained in 1,865 s. Other neighbours: `king` → consort
+0.75, kings 0.75; `three` → four 0.95; `car` → racing 0.74, cars 0.74.
+
+Two simplifications stated in the code: the window is fixed at 5, whereas
+word2vec samples an effective width from 1 to 5; and pairs cross document
+boundaries, harmless on text8, wrong on separate documents. Batches are drawn
+with replacement, so "3 epochs" is not comparable with gensim's epochs = 3.
+
+The chapter's intuition check — why does `np.add.at` need gradient clipping?
+Real word2vec updates one pair at a time. Batching breaks that: `np.add.at`
+accumulates every gradient for a repeated index and applies the sum in one step;
+a common word can appear a hundred times in a batch of 2,048. Without clipping
+this run diverged to nan within half an epoch — which is what happened the first
+time it was run for the chapter, at learning rate 0.05. Be precise: the clip
+bounds each per-example contribution, not the accumulated row update; what it
+prevents is one large residual multiplied by a context vector whose norm has
+grown. The clean fix divides each row's accumulated gradient by its count in the
+batch. It is the price of vectorising a sequential algorithm — and a good example
+of why "I reimplemented the paper and it didn't work" is usually about
+optimisation details rather than the equations.
+:::
+
+## Two routes, one destination
+
+::: {.lede}
+Levy & Goldberg (2014): skip-gram with negative sampling *implicitly factorizes* a matrix.
+:::
+
+$$\mathbf{v}_w \cdot \mathbf{u}_c = \mathrm{PMI}(w, c) - \log K$$
+
+- This holds at the optimum, with the dot products free. Nobody builds that matrix: [it is never constructed, it is *reached*]{.hl}
+- PMI, not PPMI: a never-seen pair is $-\infty$. The explicit matrix you would build is SPPMI $= \max(\mathrm{PMI} - \log K,\ 0)$
+
+::: {.takeaway}
+Levy et al. (2015): give count methods the hyperparameters word2vec quietly uses, and the performance gap mostly disappears.
+:::
+
+::: {.src}
+Baroni et al. 2014 · Levy & Goldberg 2014 · Levy, Goldberg & Dagan 2015
+:::
+
+::: {.notes}
+For a year the field treated counting (LSA, PPMI+SVD) and predicting (word2vec)
+as rival philosophies. Baroni, Dinu and Kruszewski (2014) framed it as a contest
+and reported predicting winning. Then Levy and Goldberg proved the implicit
+factorization. The neural network was a matrix factorization wearing a costume.
+
+The algorithm only ever sees one pair at a time and nudges two vectors. Yet run
+it to convergence and read off the dot product for any pair, and you get that
+pair's PMI minus a constant.
+
+The clipping lives in a different place from route A: it is a patch applied
+when you construct an explicit SPPMI matrix. Training SGNS clips nothing — it
+never has to represent −∞, because it only sees the pairs it samples.
+
+The −log K term: raising K contrasts each real pair against more fakes, which
+lowers the target for every dot product by the same fixed amount — uniform in the
+implicit matrix, which is not the same as shifting every word vector by an
+offset. In practice K is one of the less important settings, an empirical
+observation rather than a consequence of the algebra.
+
+The follow-up hyperparameters: subsampling, context distribution smoothing,
+dynamic windows. The lesson generalises: when a new method beats an old one, some
+of the improvement is the method and some is the tuning, and the split is rarely
+reported.
+:::
+
+## Where the −log K comes from
+
+::: {.lede}
+Fix one pair; treat $z = \mathbf{v}_w \cdot \mathbf{u}_c$ as a free number. Its real count pulls up, and the sampler's accidental draws — $K$ times the chance of drawing $c$ — push down:
+:::
+
+$$P(w,c)\,\log \sigma(z) \;+\; K\,P(w)P(c)\,\log \sigma(-z)$$
+
+Set the derivative to zero, $P(w,c)\bigl(1 - \sigma(z)\bigr) = K\,P(w)P(c)\,\sigma(z)$, and solve:
+
+$$z = \log \frac{P(w,c)}{K\,P(w)P(c)} = \mathrm{PMI}(w,c) - \log K$$
+
+::: {.small-note}
+The theorem fixes the *target*, not the compromise. At low rank, SVD minimises squared error weighting every cell equally; SGNS minimises a logistic loss weighted by how often each pair was sampled. Same target, different losses — not generally the same vectors.
+:::
+
+::: {.notes}
+Derivatives used: d/dz log σ(z) = 1 − σ(z) and d/dz log σ(−z) = −σ(z). After
+solving for σ(z), convert back through z = log(σ/(1 − σ)).
+
+The one assumption doing real work is that z can be chosen freely for every
+pair. It cannot: the dot products share the same vectors, and with d far below
+the vocabulary size the model must compromise.
+
+A second assumption hides in the notation and contradicts the code: writing the
+noise weight as K·P(w)P(c) assumes raw unigram negatives. word2vec draws from
+f(c)^0.75 instead, which gives PMI against a smoothed context distribution.
+Levy, Goldberg and Dagan (2015) call this context distribution smoothing and
+show it transfers to PPMI+SVD, where it is worth several points. So the 0.75
+exponent changes which matrix the algorithm factorizes.
+
+The statistical difference, for the statisticians. Truncated SVD gives the best
+rank-d approximation in Frobenius norm (Eckart–Young–Mirsky), weighting every
+cell equally — and most cells of a PPMI matrix are zero. SVD spends most of its
+budget faithfully reproducing "these two words never met". SGNS never sees a
+cell it did not sample. That, and not the neural framing, is where SGNS's
+advantage on rare words comes from — and it is exactly the defect GloVe's
+weighting function was designed to fix. Read the three methods as three answers
+to one question: how much should a cell you barely observed count?
+
+If the lecture is split in two, this is the place.
+:::
+
+## GloVe: counting, with a loss function
+
+$$\mathcal{L} = \sum_{w,c} f(X_{wc}) \left(\mathbf{v}_w \cdot \mathbf{u}_c + b_w + b_c - \log X_{wc}\right)^2$$
+
+:::: {.columns}
+
+::: {.column width="58%" .compact}
+- Weighted least squares on log counts, one bias per word — about as classical as statistics gets
+- **Why $\log X$?** Counts are Zipfian; logs turn ratios into differences
+- **Why biases?** They absorb row and column totals: [GloVe rediscovers PMI, but fits it]{.hl}
+- **Why $f$?** $f(0) = 0$, so $\log 0$ is never evaluated; the cap stops the most frequent pairs dominating
+:::
+
+::: {.column width="42%"}
+$f(x) = (x/x_{\max})^{3/4}$ below $x_{\max} = 100$, else 1
+
+| $X_{wc}$ | $f(X_{wc})$ |
+|--------:|------------:|
+| 0       | 0.00        |
+| 1       | 0.03        |
+| 10      | 0.18        |
+| 100     | 1.00        |
+| 100,000 | 1.00        |
+:::
+
+::::
+
+::: {.src}
+Pennington et al. 2014
+:::
+
+::: {.notes}
+If counting and predicting are the same thing underneath: could you do the
+counting explicitly and still get the benefits of gradient descent? GloVe took
+that synthesis seriously. Build the global co-occurrence matrix, then fit vectors
+so that dot products reproduce log co-occurrence counts, weighting rare pairs
+down.
+
+Why log X: a few pairs occur millions of times, most once. Fitting raw counts
+would make the loss entirely about `of the`.
+
+Why biases: b_w absorbs anything that depends only on w, b_c anything that
+depends only on c — exactly the row and column totals. So v·u is left to explain
+what is left over after each word's overall frequency. Dividing by the row and
+column totals in the PMI formula is subtracting their logs, and that is what
+these biases learn to do.
+
+Why f: a pair that never co-occurs has log 0 = −∞, and a pair that co-occurs
+constantly would swamp everything. f(0) = 0 means the infinity's coefficient is
+zero. The cap: a pair seen 100,000 times gets the same weight as one seen 100
+times, so the most frequent — and least informative — pairs cannot dominate. The
+same instinct as word2vec's subsampling, implemented as a weight rather than a
+deletion. The exponent is even the same 0.75.
+:::
+
+## What a word is now
+
+::: {.lede}
+Pretrained GloVe: 400,000 vectors, 100 dimensions, trained on Wikipedia 2014 + Gigaword 5 (6 billion tokens).
+:::
+
+| query    | nearest neighbours                                  | what it shows                          |
+|:---------|:----------------------------------------------------|:---------------------------------------|
+| `king`   | prince 0.77, queen 0.75, son 0.70                   | —                                      |
+| `pump`   | pumps 0.84, pumping 0.77, pumped 0.71               | `pumps` is a neighbour, not an orthogonal axis |
+| `turkey` | ankara 0.75, turkish 0.72, greece 0.71              | the country — no trace of the bird     |
+| `python` | monty 0.69, php 0.59, perl 0.58, flipper 0.51       | three meanings blended into one point  |
+| `bank`   | banks 0.81, banking 0.75, credit 0.70               | the river bank has been outvoted       |
+
+::: {.takeaway}
+The defining limitation of a static embedding: [one vector per word form, whatever the context]{.hl}. Fixing it is the biggest motivation for the contextual models of Ch. 7.
+:::
+
+::: {.notes}
+We use the pretrained GloVe vectors for the rest of the chapter, because they
+are what most people reach for when they want static embeddings.
+
+`king` starts −0.323, −0.876, 0.22, 0.253, … and has norm 6.118. One hundred
+numbers, none of which means anything on its own. The dimensions are not
+"royalty" and "gender" — they are an arbitrary basis of a learned space. Asking
+what dimension 37 means is like asking what one principal component of a
+multivariate dataset means on its own: sometimes there is an answer; usually
+there is not.
+
+`python` returns `monty` and `cleese` (the comedy troupe), `php` and `perl` (the
+language), and `flipper` (the animal).
+
+A Turkish example from the English chapter: *yüz* means face, it means hundred,
+and it is the imperative "swim". A static model gives it one row, the weighted
+average of all three — a location that means none of them. Ask that vector
+whether a review mentioning *yüz* is about a face cream or a hundred-lira price
+and it cannot answer: the answer depends on the sentence, and the vector was
+fixed before the sentence existed. No amount of training data changes that.
+:::
+
+## king − man + woman ≈ queen?
+
+:::: {.columns}
+
+::: {.column width="50%"}
+### What `gensim` returns
+
+::: {.roomy}
+| word     | cosine |
+|:---------|-------:|
+| queen    | 0.7699 |
+| monarch  | 0.6843 |
+| throne   | 0.6756 |
+| daughter | 0.6595 |
+| princess | 0.6521 |
+:::
+:::
+
+::: {.column width="50%"}
+### The same query, unfiltered
+
+::: {.roomy}
+| word      | cosine |
+|:----------|-------:|
+| **king**  | 0.8552 |
+| queen     | 0.7834 |
+| monarch   | 0.6934 |
+| throne    | 0.6833 |
+| daughter  | 0.6809 |
+:::
+:::
+
+::::
+
+::: {.takeaway}
+`gensim` silently excludes the three input words. [The nearest vector is `king`, by a wide margin]{.hl} — the famous result depends on a post-hoc filter.
+:::
+
+::: {.notes}
+The result that made embeddings famous outside NLP. It is genuinely striking:
+nobody told the model about gender, yet the offset between `man` and `woman` is
+roughly the offset between `king` and `queen`.
+
+Why subtraction should mean anything: a difference of two vectors is a
+direction of travel. king − man is "whatever you have to change about `man` to
+arrive at `king`". Following that from `woman` lands on `queen` only if the
+instruction is the same in both places — only if the four words form a
+parallelogram. And there is a reason they might: `man` and `woman` appear in
+near-identical contexts apart from the words that mark gender, so their vectors
+differ mostly along the direction those contexts push. The same holds for `king`
+and `queen`. If gender is one consistent direction, the offsets coincide.
+
+That "if" is doing a lot of work.
+
+Subtracting `man` and adding `woman` moved the vector, but not far enough to
+leave `king`'s neighbourhood. This is not a gotcha — the filter is defensible,
+since you rarely want an input echoed back — but it changes what the
+demonstration proves.
+:::
+
+## What the analogy hides
+
+- The filtered method is **3CosAdd**; **3CosMul** (Levy & Goldberg 2014) replaces the sum of cosines with a ratio and gains a few points
+- Linzen (2016): return the nearest neighbour of `woman`, never look at `king` or `man` — that alone recovers a large share of the reported accuracy
+- In five of the book's eight example analogies, the raw nearest neighbour is an input word
+- `mice − mouse + goose`: `geese` is only rank 5, behind `cows` and `rats`
+- `madrid − spain + germany` → `munich`, not `berlin`: [the model learned "German city", not "capital of"]{.hl}
+
+::: {.notes}
+The headline analogy number measures neighbourhood structure at least as much as
+it measures a relation — that is Linzen's point. Nissim, van Noord and van der
+Goot (2020) make the complementary point about how such results get presented.
+
+The eight analogies in the book's explorer (real GloVe results, with and without
+the filter): king − man + woman, paris − france + italy, walking − walk + swim,
+bigger − big + small, madrid − spain + germany, windows − microsoft + google,
+mice − mouse + goose, einstein − physics + biology. Raw top hits:
+`walking − walk + swim` → swim 0.855; `windows − microsoft + google` → windows 0.845;
+`einstein − physics + biology` → einstein 0.738. `paris − france + italy` gives
+rome 0.808 cleanly.
+
+The chapter also projects thirty words to two dimensions: royalty, people,
+countries, capitals and verb forms separate cleanly, countries near their
+capitals. Read it with care: those are the first two principal components of
+those thirty vectors, not of all 400,000 — part of why the groups look so clean —
+and they keep only 37.5% of the variance. Every number in the chapter is computed
+in 100 dimensions, never from a projection.
+:::
+
+## Turkish makes more than twice the word forms
+
+::: {.lede}
+Two Wikipedia samples of comparable size:
+:::
+
+|                                        | Turkish   | English   |
+|:---------------------------------------|----------:|----------:|
+| tokens                                 | 1,458,213 | 1,828,840 |
+| distinct word forms                    | 138,578   | 78,140    |
+| forms seen after 1 million tokens      | 112,644   | 52,347    |
+| forms seen exactly once (hapax)        | 50.0%     | 46.7%     |
+| held-out tokens never seen in training | 7.33%     | 4.72%     |
+
+::: {.takeaway}
+`ev`, `evim`, `evimde`, `evimdeki`, `evlerimizdekiler` are five vocabulary entries. [Nearly one Turkish token in fourteen in held-out text is unseen, and half the vectors come from a single observation.]{.hl}
+:::
+
+::: {.notes}
+Everything so far has one vector per word form, learned only for forms seen in
+training. Ask for a word the model never saw — an out-of-vocabulary word — and
+you get an exception. For English that is an annoyance. For Turkish it is a
+design failure.
+
+Turkish produced 138,578 distinct forms from 1.46 million tokens; English
+produced 78,140 from more tokens, 1.83 million. Each Turkish form needs its own
+vector, estimated from its own sparse handful of occurrences.
+
+Vocabulary growth, new forms per million tokens: Turkish 45,688 at 250k, 73,435
+at 500k, 97,412 at 750k, 112,644 at 1M, 126,389 at 1.25M; English 22,869,
+34,016, 42,854, 52,347, 60,178. More than twice as many, and the curve is not
+flattening.
+
+Hapax: Turkish 69,296 of 138,578 types; English 36,503 of 78,140.
+Out-of-vocabulary rate, training on 90% and testing on the last 10%: Turkish
+7.33% of tokens and 28.99% of types unseen; English 4.72% and 23.29%.
+:::
+
+## fastText: a word is the sum of its pieces
+
+$$\mathbf{v}_{\text{word}} = \mathbf{v}_{\langle\text{word}\rangle} + \sum_{n\text{-grams } g} \mathbf{v}_g$$
+
+- Every n-gram vector is trained by *every* word containing it: `<pu` by `pump`, `pumps`, `pumped`, `pumping`, `punch` …
+- A rare word is assembled from pieces that each had plentiful data; an unseen word still has n-grams — [the vocabulary becomes open]{.hl}
+
+**pumps**, seen in training: [**&lt;pu**]{.chip} [**pum**]{.chip} [**ump**]{.chip} [mps]{.chip} [ps&gt;]{.chip} [&lt;pumps&gt;]{.chip}
+
+**pumpage**, never seen: [**&lt;pu**]{.chip} [**pum**]{.chip} [**ump**]{.chip} [mpa]{.chip} [pag]{.chip} [age]{.chip} [ge&gt;]{.chip} — word2vec: `KeyError`
+
+::: {.small-note}
+Drawn with 3-grams; fastText's default is every n-gram of length 3 to 6, so a real `pumpage` decomposes into 22 pieces, not 7.
+:::
+
+::: {.notes}
+fastText's answer (Bojanowski et al. 2017) is to stop treating a word as atomic:
+represent it as the sum of its character n-grams — its subwords — plus a vector
+for the whole word.
+
+The bold pieces are shared. That overlap is the whole trick: an unseen word
+inherits meaning from the words it is spelled like. `pumpage` has no whole-word
+vector, so the n-grams carry it alone.
+
+The angle brackets mark word boundaries; that is how the model distinguishes a
+suffix from the same letters mid-word. The book's widget lets students type a
+word — the default is `kitaplarımızdaki` against `kitaplar` — and see which
+n-grams are shared.
+
+The trade is visible in the equation. A word's identity is spread across its
+spelling, so fastText cannot easily represent a word whose meaning has nothing
+to do with how it is written. Sums are commutative and indifferent; they cannot
+tell `<pu` that it means something different inside `punch` than inside `pump`.
+:::
+
+## What subwords buy
+
+::: {.lede}
+Out-of-vocabulary words: two Turkish forms the Turkish Wikipedia sample never contained, then two typos. word2vec raises `KeyError`; fastText still answers:
+:::
+
+| word               | fastText's nearest neighbours                            |
+|:-------------------|:---------------------------------------------------------|
+| `kitaplarımızdaki` | kitapları 0.91, kitapların 0.91, kitaplıkları 0.90       |
+| `bilgisayarcılık`  | bilgisayara 0.96, bilgisayarlı 0.96, bilgisayar 0.96     |
+| `philosphy`        | philosophy 0.96, philosophie 0.95, philosophies 0.94     |
+| `governmentt`      | government 0.98, governments 0.94, governmental 0.93     |
+
+::: {.takeaway}
+The same trick handles typos — [why fastText is a quietly popular choice for user-generated text]{.hl}.
+:::
+
+::: {.notes}
+The two Turkish rows come from word2vec and fastText trained on the same Turkish
+Wikipedia sample: neither word is in either model's vocabulary, and word2vec
+raises KeyError on both. The last two rows are typos, not in the vocabulary
+either.
+
+Fourth neighbours, for completeness: `kitaplarımızdaki` → kitaplarda 0.90;
+`bilgisayarcılık` → bilgisayarı 0.96; `philosphy` → philology 0.94;
+`governmentt` → governs 0.91.
+:::
+
+## What subwords cost
+
+| query                          | fastText                            | word2vec                                    |
+|:-------------------------------|:------------------------------------|:--------------------------------------------|
+| `kitap` (book)                 | kitapta 0.96, kitaba 0.95, kitab 0.94 | eseri 0.81, makale 0.80, eseriyle 0.80    |
+| `yaz` (summer; also "write")   | yao 0.78, yağ 0.77, yağdı 0.77      | kış 0.86, olimpiyatları 0.84, aylarında 0.83 |
+| cosine `kitap`–`kitle`         | +0.667                              | +0.446                                      |
+
+- `kitap`: inflections versus *semantic* neighbours. Which you want depends entirely on the task
+- `yaz`: three-character words are mostly n-gram, so the subword signal drowns the semantic one
+
+::: {.takeaway}
+Subwords trade semantic precision for morphological coverage. [Take the trade when the vocabulary is open and words are long; refuse it when short words carry the load.]{.hl}
+:::
+
+::: {.notes}
+Now the part the tutorials skip. Character n-grams buy morphology by assuming
+similar spelling implies similar meaning — and in any language that assumption is
+sometimes badly wrong.
+
+`kitap`: word2vec returns `eseri` (his/her work) and `makale` (article).
+
+`yaz`: word2vec has learned the season — `kış` (winter), `olimpiyatları`
+(olympics), `gündönümü` (solstice). fastText returns `yao`, `yağ` (oil), `yayoi`,
+`yay` (bow): words that share letters and nothing else.
+
+`kitap` (book) and `kitle` (mass, crowd) are unrelated words that share three
+letters; fastText scores them half again as similar as word2vec does.
+
+The rule in full: take the trade when your vocabulary is open and your words are
+long — Turkish, Finnish, Hungarian, German compounds, chemical names, product
+codes, user-generated text. Refuse it when the vocabulary is closed and short
+words carry the load. This is the same trade-off as BPE in Chapter 2, now applied
+to meaning rather than to tokenization.
+:::
+
+## Documents as vectors
+
+::: {.lede}
+Chapter 2's four 20 Newsgroups categories, same split, same logistic regression on top:
+:::
+
+| representation                   | accuracy | dimensions |
+|:---------------------------------|---------:|-----------:|
+| TF-IDF (Ch. 2 baseline)          | **0.853** | 32,014    |
+| averaged GloVe                   | 0.820    | 100        |
+| idf-weighted averaged GloVe      | 0.822    | 100        |
+| doc2vec (PV-DBOW, 40 epochs)     | 0.839    | 100        |
+| averaged GloVe + doc2vec         | 0.845    | 200        |
+
+::: {.takeaway}
+[The sparse Ch. 2 baseline wins.]{.hl} Dense vectors buy size, not accuracy: 0.820 against 0.853 with 320 times fewer dimensions.
+:::
+
+::: {.small-note}
+Test set ≈ 1,500 documents, so SE ≈ 0.010: the 1.9-point doc2vec gap is about two SEs on one split, the 0.2-point gap is noise, the 3.3-point TF-IDF gap survives.
+:::
+
+::: {.notes}
+The obvious move is to average the word vectors in a document: a 100-dimensional
+document vector instead of a 32,000-dimensional sparse one. doc2vec (Le and
+Mikolov 2014) is less naive: it learns a vector per document by the same
+negative-sampling trick, treating the document id as an extra context. Two
+flavours, the CBOW and skip-gram of the document world: PV-DM adds a document
+slot to CBOW; PV-DBOW uses the document vector alone to predict words drawn from
+it. Le and Mikolov recommend PV-DM; Lau and Baldwin (2016) re-ran both carefully
+and found PV-DBOW at least as strong and much cheaper, which is why gensim's
+defaults follow it. doc2vec is also the field's best-known reproducibility case:
+the paper's headline IMDB error rate was not independently reproduced for years,
+and the gap turned out to be hyperparameters and training length.
+
+The catch at inference: a new document has no row, so its vector needs more
+gradient steps — which is why averaging, for all its flaws, is still the more
+common choice.
+
+On the statistics: the right test for the small gaps is McNemar's on the paired
+predictions, and the right presentation a mean over several splits with a
+spread.
+
+If you are storing ten million document vectors, or doing nearest-neighbour
+search over them, the dimension ratio decides your architecture. If you are
+classifying four newsgroups on 2,327 training documents, it buys nothing.
+
+Why does averaging do so well at all? Topic classification is largely a
+bag-of-topics problem, and the average of a document's word vectors is a decent
+estimate of its topic centroid. Arora, Liang and Ma (2017) show a weighted average
+plus removal of the first principal component is a hard baseline to beat for
+sentence similarity.
+:::
+
+## What averaging destroys
+
+- Coverage: GloVe knows 98.6% of the corpus's *tokens* but only 84.5% of its *types* — the missing 15% are the rare, informative, domain-specific words, and averaging silently drops them
+
+```text
+a = "the pump failed and the valve is fine"
+b = "the valve failed and the pump is fine"
+```
+
+::: {.fragment}
+- Cosine of the two averaged vectors: **1.0000**. Not similar — [identical]{.hl}, because addition is commutative
+- Two sentences that would send a maintenance crew to opposite ends of the plant share one vector
+:::
+
+::: {.takeaway}
+Chapter 2's bag-of-words problem, still unsolved, now in 100 dimensions instead of 32,000. Word order needs a model that reads the sequence (Ch. 6, Ch. 7).
+:::
+
+::: {.notes}
+Ask the room for the cosine before revealing (one click).
+
+Coverage in numbers: 23,395 of 27,681 types.
+
+The code in the chapter averages the GloVe vectors of the split sentences with
+np.mean and prints the cosine, 1.0000, and "identical: True" — identical to
+floating-point precision.
+
+Word order is Chapter 6 (Language Models) and Chapter 7 (Transformers and
+Attention).
+:::
+
+## Cosine measures relatedness, not similarity
+
+:::: {.columns}
+
+::: {.column width="42%"}
+::: {.roomy}
+| pair                  | cosine    |
+|:----------------------|----------:|
+| `good` – `bad`        | 0.770     |
+| `hot` – `cold`        | 0.725     |
+| `increase` – `decrease` | **0.881** |
+| `cat` – `dog`         | **0.880** |
+| `cat` – `car`         | 0.311     |
+| `teacher` – `student` | 0.808     |
+:::
+:::
+
+::: {.column width="58%"}
+- A pair of exact antonyms is *more* similar than two related animals
+- Not a bug in GloVe: antonyms are perfectly substitutable — *sales increased sharply*, *sales decreased sharply* — so they keep identical company
+- The embedding encodes *relatedness*; similarity and oppositeness are both kinds of it
+:::
+
+::::
+
+::: {.takeaway}
+[Never build a sentiment or polarity feature out of raw cosine between static word vectors.]{.hl}
+:::
+
+::: {.notes}
+Static embeddings are useful, and weirder than the tutorials admit. Three defects
+students should be able to name; this is the first.
+
+This is the distributional hypothesis doing exactly what it promised.
+
+A stronger version of the warning, not about static vectors at all: Steck,
+Ekanadham and Kallus (2024) show that for a family of learned embedding models,
+cosine similarity can be arbitrary — two regularisation choices that fit the data
+equally well produce cosine values with no consistent relationship. Train the
+objective you actually want to measure, or calibrate cosine against a baseline
+from your own data, rather than treating 0.8 as meaning the same thing across two
+models.
+
+The benchmark community formalised the split with two datasets built on purpose:
+WordSim-353 for relatedness (Finkelstein et al. 2002) and SimLex-999 for strict
+similarity (Hill et al. 2015). Models score very differently on them — we see the
+numbers shortly.
+:::
+
+## The space is not isotropic
+
+:::: {.columns}
+
+::: {.column width="46%"}
+4,000 unit vectors from the top 50,000 GloVe words
+
+::: {.roomy}
+| statistic                     | value  |
+|:------------------------------|-------:|
+| mean cosine, random pairs     | 0.029  |
+| standard deviation            | 0.119  |
+| pairs with cosine > 0         | 56.9%  |
+| norm of the mean vector       | 0.171  |
+| mean cosine after centring    | −0.000 |
+:::
+:::
+
+::: {.column width="54%" .compact}
+- Isotropic null: mean cosine 0, variance $1/d$ — angles concentrate near 90°
+- Mean cosine and mean-vector norm are one number: $(4000 \times 0.171^2 - 1)/3999 = 0.029$
+- A shared component of measurable size: [tilted off centre, not crammed into a narrow cone]{.hl}
+- Fix: subtract the mean, perhaps the top principal components too — one line (Mu & Viswanath 2018)
+- BERT and GPT-2 are *more* anisotropic than static vectors (Ethayarajh 2019)
+:::
+
+::::
+
+::: {.notes}
+If embeddings used their space well, two random words would sit at a mean cosine
+of zero. Be precise about the null, because the obvious phrasing is wrong: for
+independent unit vectors drawn uniformly in d dimensions the angles do not spread
+evenly; they concentrate near 90°, with mean cosine 0 and variance 1/d. Isotropy
+means no direction is special, not that every angle is equally likely.
+
+56.9% positive proves little on its own: the isotropic share would be 50%, and
+the 8 million pairs come from 4,000 vectors, so they are nowhere near
+independent observations.
+
+The mean cosine and the mean-vector norm are not two pieces of evidence: for n
+unit vectors, mean cosine = (n·‖mean‖² − 1)/(n − 1). Together they say there is
+a shared directional component of measurable size, and removing it leaves a mean
+cosine of zero. Centring does not make the covariance spherical, though.
+
+The book's histogram widget: the raw distribution of cosines sits to the right of
+zero; subtracting the mean vector recentres it. All-but-the-top improves most
+similarity benchmarks for one line of code.
+:::
+
+## Frequency leaks in; your domain lives in the tail
+
+::: {.lede}
+Frequent words get more updates: mean norm 6.19 for the top 100 words, 3.62 for ranks 100,000–400,000.
+:::
+
+| term         | rank    | nearest neighbours                         |
+|:-------------|--------:|:-------------------------------------------|
+| `water`      | 430     | natural 0.70, dry 0.68, salt 0.68          |
+| `turbine`    | 15,747  | turbines 0.80, compressor 0.78, generator 0.72 |
+| `cavitation` | 109,044 | aliasing 0.56, barotrauma 0.54, attenuation 0.54 |
+| `impeller`   | 124,835 | armature 0.62, evaporator 0.61, nozzle 0.60 |
+| `eutectic`   | 159,022 | azeotrope 0.61, azeotropic 0.55, tiwai 0.54 |
+
+::: {.takeaway}
+Before shipping anything built on pretrained vectors, [read the neighbours of your twenty most important domain terms]{.hl}. If they look like `eutectic`, you need domain-adapted vectors, a subword model, or a different approach.
+:::
+
+::: {.notes}
+Mean vector norm by frequency rank: 0–100: 6.19; 100–1,000: 5.85; 1,000–10,000:
+5.45; 10,000–100,000: 4.99; 100,000–400,000: 3.62. Spearman(log rank, norm) over
+the top 100k words: −0.313. Norm falls monotonically with rarity. Cosine ignores
+norms, one more reason to prefer it — but any method using raw dot products,
+Euclidean distance, or unnormalised embeddings as model input is partly modelling
+word frequency.
+
+More importantly, quality falls with rarity too. `turbine` at rank 15,747 is
+excellent. `cavitation` returns `aliasing` and `attenuation` — plausible-sounding
+technical words with nothing to do with pump physics. `eutectic` gets `azeotrope`
+right, then breaks down into `tiwai` and `bifurcation`.
+
+The chapter calls this the single most important practical point in the chapter
+for engineers: pretrained embeddings are excellent for words Wikipedia discusses
+often and unreliable for the vocabulary that defines your problem. It is much
+cheaper to learn this now than after deployment.
+:::
+
+## Bias is in the data, and the geometry records it
+
+:::: {.columns}
+
+::: {.column width="40%"}
+Projection onto `woman` − `man`
+
+| word           | projection |
+|:---------------|-----------:|
+| `homemaker`    | +0.363     |
+| `nurse`        | +0.329     |
+| `receptionist` | +0.281     |
+| `teacher`      | +0.152     |
+| `doctor`       | +0.109     |
+| `scientist`    | −0.046     |
+| `programmer`   | −0.083     |
+| `engineer`     | −0.123     |
+:::
+
+::: {.column width="60%" .compact}
+Nobody put this in: it is a faithful measurement of how Wikipedia and news text used these words in 2014.
+
+1. **A measurement, not a malfunction** — used deliberately, a quantitative instrument for studying bias in text
+2. **It transfers to decisions** — a résumé screener inherits the association and applies it identically to every applicant, forever
+3. **Debiasing is harder than it looks** — projected-out vectors [still cluster by gender]{.hl} (Gonen & Goldberg 2019)
+:::
+
+::::
+
+::: {.src}
+Bolukbasi et al. 2016 · Caliskan et al. 2017 · Gonen & Goldberg 2019
+:::
+
+::: {.notes}
+The chapter lists the words in a different order (doctor, nurse, engineer,
+teacher, programmer, homemaker, scientist, receptionist); the slide sorts them by
+projection. Positive means the `woman` side.
+
+The projection method is Bolukbasi et al.'s (2016), though they defined the gender
+direction from the principal component of about ten word pairs rather than one
+pair, which makes their axis less noisy and ours easier to check by hand.
+Caliskan, Bryson and Narayanan (2017) showed embeddings reproduce the full range
+of documented human implicit associations, including racial ones, with effect
+sizes matching psychological studies.
+
+Interviewers ask about all three consequences. On debiasing: the original method
+projects out a gender direction. Gonen and Goldberg showed this mostly hides the
+bias — a classifier recovers the original grouping with high accuracy. The
+information was redistributed, not removed.
+
+Ask the room the chapter's intuition check: is a model that shows no bias on
+this test unbiased? No. The test measures one direction defined by one word pair;
+bias not aligned with woman − man is invisible to it, and Gonen and Goldberg
+demonstrated exactly that for debiased vectors — they pass the projection test
+and fail a clustering test on the same data. Passing a fairness metric is
+evidence about the metric, not the model. Report which test you ran, what it can
+detect, and what it structurally cannot.
+:::
+
+## How do you know an embedding is any good?
+
+:::: {.columns}
+
+::: {.column width="52%" .compact}
+- **Intrinsic**: does the space match human judgements — similarity ratings, analogies? Fast, no downstream task
+- **Extrinsic**: does it improve the thing you care about? Slow, and [the only one that pays]{.hl}
+- Same GloVe vectors, two benchmarks that disagree on purpose: WordSim-353 (relatedness) Spearman **0.533**; SimLex-999 (strict similarity) **0.296**
+- Use intrinsic scores to catch gross breakage, never to choose between two reasonable candidates (Schnabel et al. 2015)
+:::
+
+::: {.column width="48%"}
+Google analogies: **0.633** overall
+
+| category                  | accuracy |
+|:--------------------------|---------:|
+| capital-common-countries  | 0.939    |
+| capital-world             | 0.890    |
+| nationality-adjective     | 0.879    |
+| family                    | 0.816    |
+| city-in-state             | 0.308    |
+| opposite                  | 0.202    |
+| currency                  | 0.152    |
+:::
+
+::::
+
+::: {.notes}
+The distinction matters in interviews.
+
+The WordSim/SimLex gap is the headline: it is the quantitative version of
+`increase`/`decrease` scoring 0.881, and it is why an intrinsic score is only
+interpretable once you know which of the two your task needs. Schnabel et al.
+showed that intrinsic rankings frequently disagree with extrinsic ones.
+
+The Google analogy set: 19,544 questions in 14 categories. The per-category
+breakdown is where the score stops being one number. Capitals are 0.939 and 0.890
+because text states which city is the capital of which country constantly. But
+currency is 0.152 and opposites 0.202. The model is not reasoning about
+relations; it reproduces the ones its corpus repeats often. The headline 0.633
+averages categories from nearly solved to nearly chance, which is why a single
+analogy number should never be used to rank two embeddings.
+
+The rest of the categories: gram1-adjective-to-adverb 0.244, gram3-comparative
+0.791, gram4-superlative 0.543, gram5-present-participle 0.695, gram7-past-tense
+0.554, gram8-plural 0.720, gram9-plural-verbs 0.584. Category names on the slide
+drop the "gram6-"/"gram2-" prefixes.
+
+A gensim detail: evaluate_word_pairs and evaluate_word_analogies default to
+restrict_vocab = 300,000, so the 100,000 rarest GloVe vectors are never allowed to
+be wrong — quietly flattering, given what we saw about the tail.
+:::
+
+## A comparison that looks better than it is
+
+|                    | GloVe · 6 billion tokens | from scratch · 6.8 million tokens |
+|:-------------------|:-------------------------|:----------------------------------|
+| WordSim-353        | 0.533 · 0.0% skipped     | **0.627** · 11.9% skipped          |
+| SimLex-999         | 0.296 · 0.1% skipped     | 0.268 · 13.4% skipped              |
+| Google analogies   | 0.633                    | 0.200                              |
+
+- The NumPy vectors "beat" GloVe on WordSim-353 — scored on the easy 88% of pairs. The skipped pairs are the rare ones, which are the hard ones
+- Analogies do not escape it: the default skips questions with unknown words. GloVe already loses 58 (19,544 in the file, 19,486 scored)
+
+::: {.takeaway}
+[A model that refuses to answer looks more accurate than one that answers and is sometimes wrong.]{.hl} Always report coverage next to the score.
+:::
+
+::: {.notes}
+Do not believe the 0.627. The from-scratch vocabulary is 18,677 words, so 11.9%
+of benchmark pairs are skipped as out-of-vocabulary. GloVe is scored on all 353
+pairs; the NumPy model on the easy 88%.
+
+This is the most common way embedding comparisons are quietly wrong.
+
+Including here: it would be convenient to say the analogy numbers, 0.200 against
+0.633, escape the problem because both models face the same questions. They do
+not. evaluate_word_analogies defaults to dummy4unknown=False, which skips any
+question containing a word the model does not have. A model with an
+18,677-word vocabulary loses far more questions, and the hard ones, so the two
+scores do not share a denominator. To compare properly, score both with
+dummy4unknown=True, which forces every model to answer all 19,544 questions and
+counts a miss as wrong. Until that is run, quote each number with the count of
+questions actually scored — which is what the book asks of everyone else.
+:::
+
+## Choosing between them
+
+| method         | reach for it when                                               | watch out for                                                    |
+|:---------------|:----------------------------------------------------------------|:-----------------------------------------------------------------|
+| **PPMI + SVD** | the corpus is small, the vocabulary modest, and you must explain every number | the $V \times V$ matrix; no OOV handling; awkward to update |
+| **word2vec**   | a large domain corpus in a language without heavy morphology    | OOV words raise an error; sensitive to hyperparameters           |
+| **GloVe**      | you want good English vectors now, with no reason to train      | builds the co-occurrence matrix first; the same OOV failure      |
+| **fastText**   | Turkish, Finnish, Hungarian, Arabic; unreliable spelling        | slower and larger; `kitap`/`kitle` at 0.667; weakest on short words |
+
+::: {.small-note}
+Better OOV coverage is not task accuracy: whether it converts is a separate measurement, and Ch. 4 found it did not on one. For documents, embeddings did not beat counting at classification; they win at similarity and retrieval.
+:::
+
+::: {.notes}
+Four methods, all producing a dense vector per word, all comparable by cosine.
+The differences only matter in specific circumstances.
+
+Strengths, from the chapter's table. PPMI + SVD: no training loop; deterministic;
+every step inspectable; works on small corpora. word2vec: streams over the corpus
+(the model is still two V × d tables); fast, well understood, implementations
+everywhere; skip-gram strong on rare words. GloVe: trained on the global matrix,
+so it sees corpus-wide statistics; pretrained vectors excellent and free.
+fastText: any word gets a vector, including one invented five seconds ago;
+typo-tolerant.
+
+Counting versus predicting as engineering, from the chapter. Memory: counting
+holds a V × V matrix — 160 billion cells at V = 400,000 if stored densely, but
+nobody does; the real cost is one monolithic artifact, expensive to build and to
+update. Predicting streams, with memory V × d regardless of corpus size. Corpus
+size: counting is comfortable on small corpora; predicting needs a lot of text
+before gradient noise averages out. Determinism: counting gives the same output
+for an exact solver (randomized SVD needs a seed; singular vectors are only
+determined up to sign); predicting runs differ. New data: recount and
+refactorize, versus keep training. The row that decides it in practice is new
+data: counting is the better pedagogy and the better choice for a modest corpus;
+predicting survives contact with a corpus that keeps growing.
+
+Documents: averaged word vectors need no training and work instantly on unseen
+documents, but destroy word order and negation. doc2vec scored 0.839 against
+0.820 — about two standard errors on one split, a direction rather than a
+verdict — and a new document needs gradient steps at query time. English
+newsgroup posts are the easiest possible case for a bag of words; Chapter 4 (A
+Representation Bake-Off) runs the comparison properly — a different language and
+domain, seventeen times more data, and a learning curve that finds where the
+ordering flips. Treat "embeddings did not beat counting" as a hypothesis until
+then.
+:::
+
+## Where this is actually deployed
+
+- **Airbnb search ranking** — listing embeddings from skip-gram on click sessions: session = sentence, listing = word, the booked listing as global context (Grbovic & Cheng 2018)
+- **YouTube recommendations** — video and search-token embeddings averaged into a user vector, fed to a deep candidate generator (Covington et al. 2016)
+- **Item2vec** — the same objective on purchase baskets and playlists; any `*2vec` is this pattern (Barkan & Koenigstein 2016)
+- **fastText classification** — a linear model over averaged subword n-grams, trains in minutes on a CPU (Joulin et al. 2017)
+- **Retrieval, everywhere** — every vector database and RAG pipeline (Ch. 20) runs this idea, with contextual vectors instead of static ones
+
+::: {.takeaway}
+[Embeddings are how you make discrete things differentiable.]{.hl} That is why the idea outlived the specific models.
+:::
+
+::: {.notes}
+Static embeddings are not a historical curiosity. The technique — learn a dense
+vector for a discrete item from co-occurrence, then do arithmetic on it — became
+infrastructure far beyond text.
+
+Airbnb: deployed to production search and reported as a substantial booking
+gain. YouTube: the paper is the canonical description of two-stage
+recommendation. fastText for classification: "on par with deep learning
+classifiers" while training in minutes on a CPU — still an excellent first
+baseline, and a good production answer for high-volume, low-latency text
+routing. Retrieval: text as coordinates, compared by cosine — Chapter 20
+(Retrieval-Augmented Generation).
+:::
+
+## What static embeddings cannot do
+
+| limitation                   | evidence from this chapter                          | fixed by                        |
+|:-------------------------|:---------------------------------------------|:-----------------------------|
+| One vector per word form     | `python` blends Monty, PHP and the snake            | contextual embeddings (Ch. 7)   |
+| No word order                | *pump failed / valve fine* = its reverse            | sequence models (Ch. 6)         |
+| Out-of-vocabulary words      | word2vec `KeyError`; 7.3% of Turkish tokens         | subwords (fastText, BPE)        |
+| Antonyms look like synonyms  | `increase`/`decrease` at 0.881                      | task-supervised fine-tuning     |
+| Anisotropic geometry         | mean cosine 0.029 against 0 under isotropy          | mean removal, whitening         |
+| Rare words collapse          | `eutectic` → `tiwai`                                | domain adaptation, subwords     |
+| Bias from the corpus         | `homemaker` +0.363 on the woman axis                | no clean fix: measure, document |
+
+::: {.takeaway}
+A static embedding is a lookup table: one output per input. [To give `bank` a different vector by a river than in a market, compute it from the sentence.]{.hl}
+:::
+
+::: {.notes}
+Collecting the failures we accumulated, because together they are the
+specification for the next part of the book.
+
+The first two are the important ones, and they have the same root cause: a
+static embedding is a function from word form to vector, and a function has one
+output per input. The representation has to be computed from the sentence rather
+than looked up — which is what Chapter 7 does, and why an LLM's contextual
+vectors are computed from the sentence each time rather than stored per word.
+
+The anisotropy row in full: mean cosine 0.029 against 0 under an isotropic null,
+from a mean vector of norm 0.171; centring removes it.
+
+The transition was not instant. ELMo (Peters et al. 2018) made it concrete by
+running a bidirectional language model over the sentence and using its internal
+states as the word representation — the moment "one vector per word" stopped
+being the default. Everything after it, including every model in the book from
+Chapter 7 onward, is a refinement of that move.
+:::
+
+## Intuition check 1 of 6 {.question}
+
+::: {.ask}
+Your embedding has 300 dimensions. Why 300 and not 30 or 3,000?
+:::
+
+::: {.fragment}
+- Nothing magic: a bias–variance trade-off that bottoms out in the low hundreds for word-level tasks
+- Too few, and unrelated words share coordinates — the 2-D toy space made almost everything similar
+- Too many, and rare words get vectors fitted to a handful of contexts; memory and search grow linearly
+- GloVe 50 → 100 dimensions: WordSim 0.503 → 0.533, SimLex 0.263 → 0.296, analogies 0.464 → 0.633
+- [Tune it on the downstream task]{.hl}; past a few hundred, storage and latency decide
+:::
+
+::: {.notes}
+Give students a minute before revealing (one click).
+
+The published sweeps in Pennington et al. (2014) show the gains flattening beyond
+roughly 300, which is why 300 became the default. The interview answer: tune it on
+the downstream task, and past a few hundred dimensions the decision is usually
+made on storage and latency rather than accuracy.
+:::
+
+## Intuition check 2 of 6 {.question}
+
+::: {.ask}
+Why negative sampling instead of a softmax over the vocabulary?
+:::
+
+::: {.fragment}
+- Cost: a full softmax is 400,000 dot products per pair, times tens of billions of pairs
+- Negative sampling makes $K + 1$ binary decisions, $K$ typically 5 to 20 — the cost per pair no longer depends on vocabulary size
+- Deeper: it changes the objective. You no longer estimate $P(c \mid w)$; you discriminate real pairs from noise
+- Its optimum is shifted PMI (Levy & Goldberg 2014): [principled, not merely cheap]{.hl}
+:::
+
+::: {.notes}
+The alternative is hierarchical softmax, which keeps the probabilistic
+interpretation at O(log V) and is now rarely used.
+:::
+
+## Intuition check 3 of 6 {.question}
+
+::: {.ask}
+You have 50,000 support tickets in Turkish. word2vec or fastText?
+:::
+
+::: {.fragment}
+- fastText — and the reason should be [a number, not "Turkish is agglutinative"]{.hl}
+- At 1.46 million tokens: 138,578 forms, 50% hapax, 7.3% unseen held-out tokens. 50,000 tickets is a *smaller* corpus
+- Word-level vectors would rest on one or two occurrences for most of the vocabulary, and fail outright on unseen inflections
+- The counter-argument: subwords make `kitap` look like `kitle` — if fine distinctions between short words matter, measure both
+- Tickets have typos, and subwords absorb those too
+:::
+
+::: {.notes}
+Saying the counter-argument is what separates a good answer from a memorised one.
+:::
+
+## Intuition check 4 of 6 {.question}
+
+::: {.ask}
+Two documents' averaged vectors have cosine 0.95. Are they about the same thing?
+:::
+
+::: {.fragment}
+- Probably — but with much less evidence than the number suggests
+- **Anisotropy**: random *words* already average 0.029, and averaged documents sit far higher. High cosines are cheap
+- **Word order**: averaging destroys it, so opposite claims can average identically
+- **Rare terms**: out-of-vocabulary and rare words — the discriminative ones — are dropped or badly estimated
+- [Calibrate]{.hl}: report the percentile among random document pairs from your own corpus
+:::
+
+::: {.notes}
+For averaged documents the floor is far higher than for words, because averaging
+amplifies the shared component.
+
+The professional move: compute the cosine distribution over random document pairs
+from your own corpus and report the percentile rather than the raw number.
+:::
+
+## Intuition check 5 of 6 {.question}
+
+::: {.ask}
+Should you fine-tune pretrained embeddings on your own corpus, or train from scratch?
+:::
+
+::: {.fragment}
+- It depends on your corpus size relative to the pretrained corpus, and on how far your domain drifts
+- Under ~10 million tokens: use pretrained vectors and do not update them
+- 10 million to a few hundred million: initialise from pretrained and continue training
+- Beyond that, or a vocabulary barely overlapping general text (chemical names, part numbers, clinical codes): from scratch
+- [The diagnostic that beats all three]{.hl}: are your twenty key terms `turbine`-quality or `eutectic`-quality?
+:::
+
+::: {.notes}
+Under ten million tokens, updating pretrained vectors only overfits the handful of
+words you have.
+
+These are rules of thumb from the chapter; the diagnostic is the part to
+remember.
+:::
+
+## Intuition check 6 of 6 {.question}
+
+::: {.ask}
+"Embeddings replaced TF-IDF." True or false?
+:::
+
+::: {.fragment}
+- False as stated: on 20 Newsgroups TF-IDF scored 0.853, and every dense method scored lower
+- Sparse lexical retrieval (BM25) remains a strong baseline; production systems run lexical and dense retrieval together and fuse the rankings
+- They fail differently: lexical matching is exact and handles rare identifiers, dense matching handles paraphrase
+- [Embeddings replaced the *one-hot word*, not the TF-IDF *document*]{.hl}
+:::
+
+::: {.notes}
+That distinction is worth stating explicitly, because it is usually the point of
+the question.
+:::
+
+## Interview-style questions for discussion
+
+::: {.lede}
+Three of the chapter's twelve: one on the objective, one on the geometry, one on depth.
+:::
+
+1. Explain word2vec to someone who knows regression but not neural networks.
+2. Two unrelated words have cosine 0.3. Is that high or low?
+3. You have 100,000 items and click logs. Design an item embedding.
+
+::: {.src}
+Questions that recur in Huyen 2021 and the *Machine Learning Interviews* repository
+:::
+
+::: {.notes}
+The chapter's caution on attribution: pages claiming to list "embedding questions
+asked at Google" are search-engine content with no evidence behind them. These
+questions recur across two credible free sources: Chip Huyen's Introduction to
+Machine Learning Interviews and the Machine Learning Interviews repository on
+GitHub.
+
+The other questions in the chapter, for homework: skip-gram vs CBOW and when to
+prefer each; why the 0.75 exponent; why subsampling improves the vectors rather
+than just speeding things up; what is wrong with the king − man + woman demo; why
+semantic search returns antonyms and what to do; document vectors for 50 million
+documents under 100 ms; own-corpus embeddings worse than pretrained; detecting a
+stale production embedding; the connection between PPMI+SVD, word2vec and GloVe.
+
+Suggested format: pairs, one question each, two minutes, then the next slide.
+:::
+
+## What a strong answer names
+
+::: {.compact}
+1. **A logistic regression on word pairs** — $\sigma(v \cdot u)$, `score - labels` as the residual, a hidden layer with no activation. Then the caveat: both vectors are learned, so the loss is not jointly convex. Then Levy & Goldberg's shifted PMI — and that at low rank the two routes optimise different losses
+2. **A baseline** — random GloVe pairs average 0.029 with standard deviation 0.119, so 0.3 is about 2.3 SDs above: high. But quote your own model's baseline, and note that centring removes the shared component
+3. **word2vec on sessions** — session = sentence, item = word. Airbnb's refinements: the booked listing as global context, negatives from the same market (Grbovic & Cheng 2018). Then cold start: new items have no clicks
+:::
+
+::: {.notes}
+Fuller answers from the chapter.
+
+1. If they push back with "but isn't this a neural network?": yes, a shallow one,
+   and the two are names for the same thing. An ordinary logistic regression fits
+   weights over fixed features; this fits both vectors at once, so the score is
+   bilinear and the optimisation problem is not the same even though the
+   per-example arithmetic is. The qualifier about low rank separates someone who
+   read the paper from someone who read the tweet.
+2. Unanswerable without a baseline — that is the point of the question. The
+   distribution is corpus- and model-specific. Mention anisotropy: the mean is
+   0.029 rather than 0 (Mu & Viswanath 2018 for centring).
+3. Negatives from the same market mean the model learns within-market
+   distinctions. For cold start, propose content features or subword-style
+   composition.
+:::
+
+## Exercises
+
+:::: {.columns .compact}
+
+::: {.column width="50%"}
+1. **Redo the toy space** with window 1 and window 4. Why is a wider window more *topical*, a narrow one more *syntactic*?
+2. **Break the analogy**: three that work, three that fail. Missing knowledge, or the wrong tool?
+3. **Audit your own domain**: twenty terms, their GloVe rank and five neighbours, graded good / plausible / nonsense
+4. **The Turkish vocabulary bill**: how many Turkish tokens to reach English's OOV rate?
+:::
+
+::: {.column width="50%"}
+5. **Make averaging fail on purpose**: two sentences from your field, opposite meaning, cosine above 0.99
+6. **Beat TF-IDF** — tune doc2vec, 300-d vectors, Arora et al. 2017 — and check a different split
+7. **Implement it**: CS224N Assignment 2, or add CBOW to the NumPy code and compare on rare words
+8. **Measure a bias axis you care about**, then Gonen & Goldberg's clustering test
+:::
+
+::::
+
+::: {.notes}
+The chapter's eight exercises, shortened. Details worth reading out:
+
+3. Report the correlation between rank and your grade. This is the exercise that
+   most changes how people use pretrained vectors.
+4. Take a Turkish corpus you own and an English one of similar size; reproduce the
+   type/token and hapax numbers first.
+5. Then write the design-review paragraph explaining why this representation must
+   not gate that decision.
+6. Options: tune doc2vec hyperparameters, use 300-dimensional vectors, apply
+   Arora et al.'s weighted average with the first principal component removed, or
+   concatenate more representations. Report what worked, by how much, and whether
+   the gain survives a different train/test split.
+7. Predict the direction of the CBOW vs skip-gram difference before you run it.
+8. Pick a word pair defining an axis relevant to your domain, project twenty
+   related terms onto it, report the ranking; after projecting the axis out, can a
+   clustering still recover the original groups?
+:::
+
+## Where to go deeper
+
+| source | why |
+|:----------------------------------------|:------------------------------------------------------------|
+| [Mikolov et al. 2013a](https://arxiv.org/abs/1301.3781), [2013b](https://arxiv.org/abs/1310.4546) | skip-gram and CBOW; then negative sampling — read the second twice |
+| [Rong 2014](https://arxiv.org/abs/1411.2738) · [Goldberg & Levy 2014](https://arxiv.org/abs/1402.3722) | every gradient by hand; the negative-sampling objective in four pages |
+| [Levy & Goldberg 2014](https://papers.nips.cc/paper/5477-neural-word-embedding-as-implicit-matrix-factorization) · [Levy et al. 2015](https://aclanthology.org/Q15-1016/) | the two papers that explained word2vec |
+| [Bolukbasi et al. 2016](https://arxiv.org/abs/1607.06520), then [Gonen & Goldberg 2019](https://arxiv.org/abs/1903.03862) | read as a pair: the fix, then the correction |
+| [Jurafsky & Martin, Ch. 5](https://web.stanford.edu/~jurafsky/slp3/5.pdf) | PPMI, SVD, skip-gram and evaluation, with care; free |
+| [Stanford CS224N](https://web.stanford.edu/class/cs224n/), lectures 1–2 | the skip-gram gradient; Assignment 2 implements word2vec |
+| [Elena Voita, NLP Course For You](https://lena-voita.github.io/nlp_course/word_embeddings.html) | the best visual explanation of skip-gram and negative sampling |
+| [fastText pretrained vectors](https://fasttext.cc/docs/en/crawl-vectors.html) | 157 languages including Turkish; start here |
+
+::: {.notes}
+From the chapter's list.
+
+Papers, in reading order, all free: Mikolov et al. "Efficient Estimation of Word
+Representations in Vector Space" then "Distributed Representations of Words and
+Phrases"; Xin Rong's "word2vec Parameter Learning Explained" — the paper to read
+if the original felt like it skipped steps, and the best preparation for
+implementing it — paired with Goldberg and Levy's "word2vec Explained"; Levy and
+Goldberg's "Neural Word Embedding as Implicit Matrix Factorization" and Levy,
+Goldberg and Dagan's "Improving Distributional Similarity with Lessons Learned",
+the second being the better model of how to do empirical NLP honestly; GloVe
+(Pennington et al. 2014) and "Enriching Word Vectors with Subword Information"
+(Bojanowski et al. 2017); Bolukbasi et al. then "Lipstick on a Pig" — a good
+lesson in how fixes get overclaimed.
+
+Watch: CS224N Lecture 1, word2vec derived at the board; Google's "Visualizing
+High-Dimensional Space", four minutes that repair the intuition for "close in
+embedding space".
+
+Hands on: gensim and its word2vec tutorial, the fastest route to a model on your
+own text; Jay Alammar's "The Illustrated Word2vec" (pictures) and Sebastian
+Ruder's "On Word Embeddings" (the historical map); TensorFlow Projector, which
+loads word2vec and GloVe in the browser with PCA, t-SNE and UMAP — look up your
+own domain terms.
+
+fastText pretrained vectors (Mikolov et al. 2018): trained on Common Crawl and Wikipedia.
+:::

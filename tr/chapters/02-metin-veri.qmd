@@ -94,7 +94,7 @@ kelimenin parçası, bazen bir noktalama işareti. Bir satıcı "token başına"
 aldığında saydığı şey budur.
 :::
 
-## Normalleştirme merdiveni
+## Normalleştirme merdiveni {.smaller}
 
 | Adım | [Size ne kazandırır]{.pro} | [Size neye mal olur]{.con} | Varsayılan |
 |:--|:--|:--|:--|
@@ -133,7 +133,7 @@ transformer besliyorsanız modelin kendi tokenizer'ını kullanın ve ikisini de
 yapmayın. Ama alt kelimeler nadir bir kelimeyi parçalara böler; `kullanıyorum`
 ile `kullandık`'ı tek bir sütunda toplamaz. Bunu istediğiniz yerde — sözcüksel
 arama, seyrek bir sınıflandırıcı — bir gövdeleyici hâlâ gerçek iş yapıyor.
-16. bölüm (Türkçe ve Morfolojik Olarak Zengin Diller) onun Türkçe recall@1'i
+16\. bölüm (Türkçe ve Morfolojik Olarak Zengin Diller) onun Türkçe recall@1'i
 %28,0'dan %95,3'e taşıdığını ölçüyor.
 :::
 
@@ -159,7 +159,7 @@ Python'un `str.lower()` fonksiyonu Unicode'un *varsayılan* case mapping'ini
 özgü uyarlamaları ayrıca tanımlar, ama siz istemedikçe devreye sokmaz. Türkçe
 uyarlama gerektiren dillerden biri, çünkü iki `i` ve iki `I` harfi var.
 
-4. bölüm (Temsil Yarışması) bu hatayı gerçek bir derlemde yakalıyor, 16. bölüm
+4\. bölüm (Temsil Yarışması) bu hatayı gerçek bir derlemde yakalıyor, 16. bölüm
 yerel ayara duyarlı çözümü veriyor. Buradaki nokta yalnızca şu: "küçük harfe
 çevirme", bedava gibi sunulan dile bağımlı bir işlem.
 
@@ -177,7 +177,7 @@ açıp okuyun.
 
 :::: {.columns}
 
-::: {.column width="40%"}
+::: {.column width="35%"}
 1. Karakterlerle başla
 2. Komşu her çifti say
 3. En sık çifti yeni bir sembole birleştir
@@ -188,7 +188,7 @@ Oyuncak derlem: `low` ×5, `lower` ×2, `newest` ×6, `widest` ×3
 [Kimse ona İngilizcede ek diye bir şey olduğunu söylemedi.]{.hl} Saydı.
 :::
 
-::: {.column width="60%"}
+::: {.column width="65%"}
 ```text
 merge  1: 'e' + 's' -> 'es'  (seen 9 times)
 merge  2: 'es' + 't' -> 'est'  (seen 9 times)
@@ -376,7 +376,7 @@ düğme. BPE bu düğmeyi bir insanın tahminine göre değil, verinin istatisti
 göre ayarlar. Karesel maliyet 7. bölümün (Transformer'lar ve Attention) konusu.
 :::
 
-## Üç birim boyutu, yan yana
+## Üç birim boyutu, yan yana {.smaller}
 
 | | Karakterler | Alt kelimeler (BPE, WordPiece, Unigram) | Bütün kelimeler |
 |:--|:--|:--|:--|
@@ -616,7 +616,7 @@ Bölüm, her 10.000 token'da bir ayrık tür sayısını kaydeden kısa döngüy
 gösteriyor.
 :::
 
-## Her zaman ilk 50 listenize bakın
+## Her zaman ilk 50 listenize bakın {.smaller}
 
 :::: {.columns}
 
@@ -701,7 +701,7 @@ vana  : [0 0 0 0 0 0 1 0 0]
 - Bir arşivleme sistemi, anlam sistemi değil. Onu düzeltmek 3. bölümün bütün konusu
 
 ::: {.notes}
-1. adımda anlam yok. Farklı her token'ı topluyor, sıralıyor ve her birine bir
+1\. adımda anlam yok. Farklı her token'ı topluyor, sıralıyor ve her birine bir
 tam sayı veriyoruz: kelimenin *adresi*. `CountVectorizer().fit_transform(corpus)`
 ve ardından `get_feature_names_out()` slayttaki çıktıyı basıyor.
 
@@ -709,7 +709,7 @@ Buradaki sıra Türkçe alfabetik sıra değil, Unicode kod noktası sırası. `
 `ğ`, `ı`, `ö`, `ş`, `ü` ASCII dışında kaldığı için `z`'den *sonra* gelir. Model
 bunu umursamaz; ama çıktıyı gözle tararken siz umursarsınız.
 
-2. adım. Bir indeks vektör değildir; bir dosya dolabının çekmece numarası
+2\. adım. Bir indeks vektör değildir; bir dosya dolabının çekmece numarası
 üzerinde aritmetik yapamayız. Tek bir kelimenin en basit kodlaması: kelimenin
 adresinde tek bir 1, geri kalanı sıfır.
 
@@ -775,13 +775,13 @@ $$\mathrm{idf}(t) = \ln\!\left(\frac{1 + n}{1 + \mathrm{df}(t)}\right) + 1$$
 
 :::: {.columns}
 
-::: {.column .compact width="52%"}
+::: {.column .compact width="47%"}
 - $n = 4$. `pompa` 2 belgede geçiyor: $\ln\frac{5}{3} + 1 = 1{,}511$
 - `yine` dördünde birden: $\ln\frac{5}{5} + 1 = 1$ — [silinmiyor, aşağı çekiliyor]{.hl}
 - $1+$ terimleri, her terimi birer kez içeren fazladan bir belge gibi davranır
 :::
 
-::: {.column width="48%"}
+::: {.column width="53%"}
 | 20 Newsgroups'ta | df | df/N | idf |
 |:--|--:|--:|--:|
 | `the` | 9.477 | 0,838 | 1,18 |
@@ -1011,7 +1011,7 @@ kareli uzaklık 2'den 0'a düşer. Yani Öklid'e göre ve kosinüse göre en yak
 araması aynı sıralı listeyi döndürür — vektörler önceden normalleştirilmişse.
 Normalleştirmeyi atlarsanız L2 uzaklığı üzerine kurulmuş bir erişim indeksi,
 sessizce konuya göre değil belge uzunluğuna göre sıralamaya başlar. Bu özdeşlik
-3. bölümde, biri kosinüs indeksini L2 indeksiyle değiştirdiğinde tekrar çıkacak.
+3\. bölümde, biri kosinüs indeksini L2 indeksiyle değiştirdiğinde tekrar çıkacak.
 Mülakatçıların genelde aradığı cevap da bu denklik.
 :::
 
@@ -1208,7 +1208,7 @@ yarısı.
 Arama sıralaması bir sonraki slaytta.
 :::
 
-## BM25 — ve iki düğmesi neden zaten tanıdık
+## BM25 — ve iki düğmesi neden zaten tanıdık {.smaller}
 
 $$\mathrm{BM25}(q, d) = \sum_{t \in q} \mathrm{idf}(t) \cdot \frac{c(t,d)\,(k_1 + 1)}{c(t,d) + k_1\!\left(1 - b + b\,\frac{|d|}{\mathrm{avgdl}}\right)}$$
 
@@ -1301,7 +1301,7 @@ Bir kelime her belgede geçiyor. TF-IDF ağırlığı nedir?
 :::
 
 ::: {.notes}
-4. adıma bağlayın: dört belgelik derlemimizde `yine` tam olarak 1,0 tabanına
+4\. adıma bağlayın: dört belgelik derlemimizde `yine` tam olarak 1,0 tabanına
 oturmuştu.
 :::
 
