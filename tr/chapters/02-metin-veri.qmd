@@ -1,0 +1,1533 @@
+---
+title: "Veri Olarak Metin"
+subtitle: "2. Bölüm · Uygulamalı Doğal Dil İşleme"
+author: "Dr. Batuhan Bardak"
+lang: tr
+---
+
+## Bu dersin sonunda
+
+- ham metni modele hazır birimlere dönüştürebilir ve her ön işleme kararını savunabilirsiniz
+- byte-pair encoding'i, bir tokenizer'ın hiç görmediği bir kelimeyi nasıl parçalayacağını tahmin edecek kadar iyi anlatabilirsiniz
+- Zipf yasasını ve pratikteki sonucunu — sözlük problemini — açıklayabilirsiniz
+- bir TF-IDF vektörünü elle türetip `scikit-learn` ile aynı sayıları elde edebilirsiniz
+- bag-of-words modelinin neyi temsil edip neyi edemediğini kesin olarak söyleyebilirsiniz
+- çok dilli metinlerin güçlüklerinin — Türkçe morfolojisi dâhil — neden tokenization'da başladığını açıklayabilirsiniz
+
+::: {.notes}
+Bunlar bölümün öğrenme hedefleri. Beşincisi kitapta "ve bunu bir mülakatta
+savunabilirsiniz" diye devam ediyor. Dersi mülakat sorularıyla kapatıyoruz.
+
+Ders bölümün sırasını izliyor. Önce birimler: bir metin nasıl token'lara
+dönüşür, her bölme biçimi neden bir yönde yanlıştır ve Türkçede bunun bedelini
+kim öder. Sonra Zipf yasası; sözlüğün neden hiç büyümeyi bırakmadığını o
+açıklıyor. Sonra çekirdek kısım: dört kısa cümleyi, üzerinde uzaklık
+ölçebileceğiniz vektörlere taşıyan altı adım. Her ara sayı gösteriliyor. Ardından
+bu temsilin yapamadıkları; bir sonraki bölümün var olma sebebi bu. Son olarak da
+bütün bunların hâlâ önemli olup olmadığını soran gerçek bir deney.
+
+Bölümdeki her sayı, gösterilen kodun scikit-learn 1.9 ve tiktoken 0.13 ile
+çalıştırılmasıyla üretildi.
+:::
+
+## Problem, tek cümlede
+
+::: {.lede}
+Model, sayılar üzerinde aritmetik yapan bir fonksiyondur. Bakım kaydı ise bir karakter dizisidir.
+:::
+
+Aradaki köprünün tam olarak iki ayağı var:
+
+1. [birimlerin ne olduğuna karar vermek]{.hl} — **tokenization** (bölütleme)
+2. [her birimin hangi ağırlıkla katkı vereceğine karar vermek]{.hl} — **weighting** (ağırlıklandırma)
+
+::: {.takeaway}
+Ön işleme, modele hazırlık değildir. Ön işleme *modelin parçasıdır* — aşağıdaki her seçim bir modelleme varsayımıdır ve makalenizin yöntem bölümüne aittir.
+:::
+
+::: {.notes}
+Bütün bölüm bundan ibaret.
+
+Bunu baştan söyleyin. Çünkü bag-of-words ve TF-IDF zaman zaman "tarihe karıştı"
+diye geçiştiriliyor. Karışmadılar. Bu teknikler bir alanın seyrek (sparse)
+yarısı; yoğun (dense) yarısıyla 3. bölümde (Embedding'ler) tanışacağız. Küçük
+veride hâlâ kazanırlar, üretimdeki aramayı hâlâ onlar çalıştırır ve uygulamalı
+NLP mülakatları bunları anlayıp anlamadığınızı yoklar.
+
+Daha da önemlisi: sizi almaya zorladıkları *kararlar*, modern bir hattın da
+aldırdığı kararların ta kendisi. Sadece burada görünürler.
+
+Kutudaki istatistikçi çerçevesi bölümün kenar notu; bütün ders boyunca işe
+yarıyor.
+:::
+
+## Boşluklardan bölmek — anında başarısız olur
+
+```python
+text = "P-101'in pompası arızalandı; sorun salmastrada (yine!). Pompa değiştirildi."
+print(text.split())
+```
+
+```text
+["P-101'in", 'pompası', 'arızalandı;', 'sorun', 'salmastrada',
+ '(yine!).', 'Pompa', 'değiştirildi.']
+```
+
+- Artık `arızalandı;` ile `arızalandı` farklı kelimeler. `Pompa` ile `pompa` da öyle, `P-101'in` ile `P-101` de
+- Her düzeltme ya ayrı kalması gerekenleri birleştirir ya da birlikte kalması gerekenleri ayırır
+- [Başarısız olma biçimleri, tokenization'ın bütün tasarım uzayını verir]{.hl}
+
+::: {.notes}
+Bir model herhangi bir şeyi sayabilmeden önce, birinin "şey nedir" sorusuna
+cevap vermesi gerekir. O cevabı siz verirsiniz, bir kez verirsiniz ve sonraki
+her aşama onu devralır: sözlüğün ne kadar büyüyeceği, modelin "hiç görmediğim
+kelime" diyeceği şey ve — size token başına fatura kesiliyorsa — bir cümlenin
+kaça mal olacağı.
+
+Bu kararın alındığını kimse duyurmaz. Bir kütüphaneye yapılan tek satırlık
+çağrının içine gizlenmiş gelir. Bu kısım, onu bilerek vermekle ilgili.
+
+Terimler: *tokenization* (bölütleme), bir metin akışını modelin sayacağı
+parçalara bölmek. Neyin parça sayılacağı dile ait bir olgu değil, bir tasarım
+kararı. *Token* (birim) o parçalardan biri: çoğu zaman bir kelime, bazen bir
+kelimenin parçası, bazen bir noktalama işareti. Bir satıcı "token başına" ücret
+aldığında saydığı şey budur.
+:::
+
+## Normalleştirme merdiveni
+
+| Adım | [Size ne kazandırır]{.pro} | [Size neye mal olur]{.con} | Varsayılan |
+|:--|:--|:--|:--|
+| **Küçük harfe çevirme** | `Pompa` = `pompa`, birçok sayımı yarıya indirir | `AŞ` şirketi ile `aş` fiili aynılaşır; Türkçede `str.lower()` sessizce yanlıştır | İngilizce için evet; başka dillerde yalnızca yerel ayara duyarlı işlevle |
+| **Noktalama temizleme** | `arızalandı;` = `arızalandı` | `P-101`'i, ondalıkları, URL'leri, kimyasal formülleri bozar | Hayır — seçerek temizleyin |
+| **Stop word atma** | `the`, `is`, `of` düşer: burada token'ların %43,9'u | Olumsuzlamayı (`not`) ve *to be or not to be* gibi ifadeleri yok eder | Yalnızca seyrek sayım modellerinde |
+| **Gövdeleme** (stemming) | `kitaplarımızdan` → `kitap`; çekimleri ucuza toplar | Kaba ek kırpma: `university` → `univers` = `universe` | Hayır |
+| **Sözlük biçimine indirgeme** (lemmatization) | `gidiyorum` → `gitmek`; doğru biçimde | Sözlük ve sözcük türü etiketleme ister; yavaştır | Nadiren — alt kelimeler daha ucuz |
+
+::: {.takeaway}
+Son sütunu şüpheyle okuyun: o bir varsayılan, kural değil. [İkisini de deneyip ölçün.]{.hl}
+:::
+
+::: {.notes}
+Normalleştirme (normalization), umursamamaya karar verdiğiniz farkları bilerek
+silmek. Neden olabildiğince çok silmiyoruz? Çünkü her adım bir şeyi de yok eder
+ve neyi yok ettiğini sonradan öğrenirsiniz. Tablo her adımın *aleyhindeki*
+argümanı veriyor. Mülakatlarda asıl sorulan da bu argümanlar.
+
+Her adım, sildiği ayrımın *sizin* göreviniz için önemsiz olduğuna oynanmış bir
+bahis. Küçük harfe çevirme konu sınıflandırmasında genellikle bedavadır. Varlık
+ismi tanımada ise büyük harf sinyalin parçasıdır; çevirmek işe yarar bir ipucunu
+siler.
+
+Gövdeleme ile sözlük biçimine indirgeme aynı şeyi hedefler, ama aynı işlem
+değildir. Gövdeleme (Porter 1980) yeniden yazma kuralları uygular ve sonucun
+gerçek bir kelime olup olmadığını umursamaz. Sözlük biçimine indirgeme sözlükte
+aradığınız biçimi döndürür; İngilizcede `left` kelimesinin bir cümlede `leave`
+fiilinin geçmiş zamanı, diğerinde bir yön olduğunu bilmek zorundadır. Türkçede
+ayrım daha keskin: kök ile lemma aynı şey değil. `gidiyorum` kelimesinin kökü
+`git`, sözlük biçimi `gitmek`. İngilizce örnekler (`replaced` → `replac` /
+`replace`) bölümün tablosunda da var.
+
+"Hangisini kullanayım?" sorusunun cevabı işlem hattına bağlı. Ön eğitimli bir
+transformer besliyorsanız modelin kendi tokenizer'ını kullanın ve ikisini de
+yapmayın. Ama alt kelimeler nadir bir kelimeyi parçalara böler; `kullanıyorum`
+ile `kullandık`'ı tek bir sütunda toplamaz. Bunu istediğiniz yerde — sözcüksel
+arama, seyrek bir sınıflandırıcı — bir gövdeleyici hâlâ gerçek iş yapıyor.
+16. bölüm (Türkçe ve Morfolojik Olarak Zengin Diller) onun Türkçe recall@1'i
+%28,0'dan %95,3'e taşıdığını ölçüyor.
+:::
+
+## Bedava sanılan iki adım
+
+### Küçük harfe çevirme dile bağlıdır
+
+```python
+"İSTANBUL".lower()                # 'i̇stanbul' — 'i' + U+0307, dokuz karakter
+"İSTANBUL".lower() == "istanbul"  # False
+"IĞDIR".lower()                   # 'iğdir' — 'ığdır' olmalıydı
+```
+
+- Hiçbir şey hata vermiyor. Sonuç, kullanıcının yazdığı kelimeden farklı bir sözlük sütununa düşüyor — hem de kalıcı olarak
+
+### Stop word atmak metninizin neredeyse yarısını siler
+
+- `scikit-learn`'ün İngilizce listesi: 318 kelime, [sözlüğün %0,4'ü ama bütün token'ların %43,9'u]{.hl} — seyrek bir model için sıkıştırma kazancı, sinyal *not* kelimesindeyse felaket
+
+::: {.notes}
+Python'un `str.lower()` fonksiyonu Unicode'un *varsayılan* case mapping'ini
+(büyük/küçük harf eşlemesini) uygular; yani dilden bağımsız olanı. Standart dile
+özgü uyarlamaları ayrıca tanımlar, ama siz istemedikçe devreye sokmaz. Türkçe
+uyarlama gerektiren dillerden biri, çünkü iki `i` ve iki `I` harfi var.
+
+4. bölüm (Temsil Yarışması) bu hatayı gerçek bir derlemde yakalıyor, 16. bölüm
+yerel ayara duyarlı çözümü veriyor. Buradaki nokta yalnızca şu: "küçük harfe
+çevirme", bedava gibi sunulan dile bağımlı bir işlem.
+
+Stop word (etkisiz kelime) sayıları bölümün ilerisinde kullanılan derlemde
+ölçüldü. Stop word, o kadar sık geçen bir kelime ki bazı iş akışları saymadan
+önce onu atar: *the*, *of*, *is*. Kazanç mı kayıp mı, tamamen göreve bağlı.
+
+Türkçe için hazır stop word listelerine iki kat şüpheyle yaklaşın. Çoğu,
+çekim eki almış biçimleri değil yalın biçimleri içerir. `değil`, `yok`, `hiç`
+gibi olumsuzluk taşıyıcıları bazı listelerde vardır. Listeyi kullanmadan önce
+açıp okuyun.
+:::
+
+## Byte-pair encoding: say, birleştir, tekrarla
+
+:::: {.columns}
+
+::: {.column width="40%"}
+1. Karakterlerle başla
+2. Komşu her çifti say
+3. En sık çifti yeni bir sembole birleştir
+4. Tekrarla
+
+Oyuncak derlem: `low` ×5, `lower` ×2, `newest` ×6, `widest` ×3
+
+[Kimse ona İngilizcede ek diye bir şey olduğunu söylemedi.]{.hl} Saydı.
+:::
+
+::: {.column width="60%"}
+```text
+merge  1: 'e' + 's' -> 'es'  (seen 9 times)
+merge  2: 'es' + 't' -> 'est'  (seen 9 times)
+merge  3: 'est' + '</w>' -> 'est</w>'  (seen 9 times)
+merge  4: 'l' + 'o' -> 'lo'  (seen 7 times)
+merge  5: 'lo' + 'w' -> 'low'  (seen 7 times)
+merge  6: 'n' + 'e' -> 'ne'  (seen 6 times)
+merge  7: 'ne' + 'w' -> 'new'  (seen 6 times)
+merge  8: 'new' + 'est</w>' -> 'newest</w>'  (seen 6 times)
+merge  9: 'low' + '</w>' -> 'low</w>'  (seen 5 times)
+merge 10: 'w' + 'i' -> 'wi'  (seen 3 times)
+```
+:::
+
+::::
+
+::: {.src}
+Sennrich vd. 2016
+:::
+
+::: {.notes}
+Kelime düzeyinde tokenization'ın tamiri olmayan bir sorunu var: sözlük
+(vocabulary) asla kapanmaz. Karakter düzeyinde sorun tam tersi: diziler çok
+uzar ve her birim neredeyse hiçbir şey ifade etmez. Byte-pair encoding (BPE)
+ikisinin arasında bir orta yol bulur: birimlerini veriden *öğrenir* (Sennrich
+vd. 2016).
+
+`</w>` kelime sonunu işaretler. Kimse dilbilgisi vermeden neler olduğuna bakın.
+İlk iki birleştirme `est`'i — İngilizcenin üstünlük ekini — kuruyor, üçüncüsü
+ona kelime sınırını ekliyor; çünkü üstünlük biçimleri sık geçiyor. Ardından
+`low` ve `new`'i gövde olarak buldu.
+
+Kitap birleştirme döngüsünün Python kodunu ve bir kelime yazıp birleştirmelerin
+uygulanmasını izlediğiniz etkileşimli bir gezgini içeriyor. Burada dört
+kelimelik bir derlemden yalnızca 10 birleştirme öğrenildi; gerçek bir
+tokenizer 50.000 ve fazlasını öğrenir.
+:::
+
+## Hiç görmediği bir kelime
+
+```text
+lowest   -> low est</w>
+newer    -> new e r </w>
+slow     -> s low</w>
+widest   -> wi d est</w>
+```
+
+- Token'lara ayırmak için öğrenilen birleştirmeler, öğrenildikleri sırayla tekrar oynatılır
+- `lowest` eğitimde hiç geçmedi: [görülmemiş bir *kelime* asla bir `<UNK>` token'ına ihtiyaç duymaz]{.hl}. `slow`'da kısmen olduğu gibi daha kısa parçalara düşer; kalitesi düşer, çuvallamaz
+- Görülmemiş bir *karakter* bu oyuncağı hâlâ kırar: `çay` → `('ç', 'a', 'y', '</w>')`; hiçbiri sözlükte yok
+- Gerçek tokenizer'lar UTF-8'in 256 olası **baytından** başlar; her dizi temsil edilebilir — Türkçe bir kelimenin `<UNK>` olmak yerine *daha fazla* token'a mal olmasının nedeni de bu
+
+::: {.src}
+Radford vd. 2019
+:::
+
+::: {.notes}
+Alt kelimelerin kazanmasının bütün sebebi bu: en kötü durumda kelime daha kısa
+parçalara düşer.
+
+Çekince, oyuncak bir tokenizer ile üretim tokenizer'ı arasındaki fark.
+Birleştirme tablomuz *karakterler* üzerinde öğrenildi ve gördüğü alfabe yalnızca
+`low`, `lower`, `newest`, `widest` kelimelerinden geliyordu. Dolayısıyla
+`apply_merges("çay", merges)` sözlükte hiç olmayan karakterler döndürüyor.
+
+Bayt düzeyinde bir tokenizer kuruluş gereği her olası diziyi temsil edebilir:
+emoji, Çince ve `görüşebileceklerimiz`deki `ş` dâhil. Sonraki slaytlarda ölçülen
+bütün OpenAI kodlamaları bayt düzeyinde.
+:::
+
+## Türkçe için faturayı kim ödüyor
+
+::: {.lede}
+İnsan Hakları Evrensel Bildirgesi'nin 1. maddesi; resmî İngilizce ve Türkçe metinler OpenAI'ın tokenizer'larından geçiriliyor:
+:::
+
+::: {.roomy}
+| Tokenizer | İngilizce | Türkçe | Türkçenin maliyeti |
+|:--|:--|:--|:--|
+| `cl100k_base` (GPT-3.5/4) | 170 karakter → 33 token · token başına 5,15 karakter | 160 karakter → 60 token · token başına 2,67 karakter | **1,82 kat** token |
+| `o200k_base` | 170 karakter → 33 token · token başına 5,15 karakter | 160 karakter → 46 token · token başına 3,48 karakter | **1,39 kat** token |
+:::
+
+::: {.takeaway}
+API'ler token başına ücretlendirir, bağlam pencereleri token cinsinden ölçülür: [Türkçe konuşan biri daha az bağlam için daha çok para öder.]{.hl} Yeni tokenizer'lar farkı daraltıyor ama kapatmıyor.
+:::
+
+::: {.src}
+Petrov vd. 2023
+:::
+
+::: {.notes}
+İngilizce dışında bir dille çalışıyorsanız asıl önemli kısım bu. Tokenizer bir
+derlem üzerinde eğitilir. Bir dili ne kadar verimli kodladığı, o derlemin o
+dilden ne kadar içerdiğine bağlıdır. Çoğu insanın kullandığı tokenizer'lar için
+bu, ağırlıkla İngilizce demek.
+
+Aynı cümle, aynı anlam; GPT-3.5/4 tokenizer'ında 1,82 kat token, `o200k_base`
+ile 1,39 kat. Bu, diller arasında belgelenmiş ve ölçülmüş bir eşitsizlik (Petrov
+vd. 2023); yuvarlama hatası değil.
+
+Türkçe çalışan biri için üç pratik sonuç (bölümdeki kutu):
+
+1. Maliyeti *istek* başına değil *iş* başına ölçün. Türkçe bir özetleme, aynı
+   işi yapan İngilizce bir özetlemeden pahalıdır; bunu bütçeye baştan yazın.
+2. Bağlam penceresi ilanlarda karakter değil token cinsinden. "128.000 token"
+   Türkçe bir belgede gözle görülür biçimde daha az metin demek; parçalama
+   boyutlarınızı (20. bölüm) buna göre ayarlayın.
+3. Türkçeye özgü bir sözlük gerçekten gerekiyorsa, sentencepiece (Kudo ve
+   Richardson 2018) ile kendi tokenizer'ınızı eğitmek kapalı bir yol değil. Ama
+   önce ölçün; çoğu ekipte kazanç yeni bir model seçmekten gelir.
+
+Ölçüm bölümde kısa bir tiktoken betiği; öğrenciler 1. alıştırmada kendi
+metinleriyle tekrarlıyor.
+:::
+
+## Türkçe bir kelimenin maliyeti
+
+| Kelime | Tokenizer'ın gördüğü | Token |
+|:--|:--|:--|
+| `ev` | `' ev'` | 1 |
+| `evler` | `' ev'` `ler` | 2 |
+| `evlerimiz` | `' ev'` `ler` `im` `iz` | 4 |
+| `evlerimizden` | `' ev'` `ler` `im` `iz` `den` | **5** |
+| `gorusebileceklerimiz` | `gor` `use` `b` `ile` `cek` `ler` `im` `iz` | 8 |
+| `görüşebileceklerimiz` | `g` `ör` `ü` `ş` `eb` `ile` `cek` `ler` `im` `iz` | **10** |
+
+- *from our houses*: üç İngilizce kelime, üç token. [Daha iyi dilbilim, daha kötü fatura.]{.hl} Bölünmeler dört sınırın üçünde gerçek morfolojiyle örtüşüyor
+- Bu kelimede doğru Türkçe yazmak ASCII Türkçeden %25 daha pahalı. ASCII dışı metne dokunan her hattın ilk satırı: `unicodedata.normalize("NFC", text)`
+
+::: {.notes}
+Neden oluyor? Türkçe eklemeli bir dil: anlam, gövdeye ek üstüne ek yığarak
+kurulur (Oflazer 1994). İngilizce anlamı ayrı kelimelerle kurar; frekans temelli
+bir birleştirme algoritmasının iyi yakaladığı da tam olarak bu.
+
+İyi haber de var, ama bir çekinceyle. `ev|ler|im|iz|den`, dört sınırının üçünde
+gerçek morfolojiyle örtüşüyor: *ev*, *-ler* (çoğul), *-den* (ayrılma hâli). Kimse
+Türkçe dilbilgisinin tek bir kuralını vermedi. Çekince `im|iz`de: *-imiz*
+(iyelik) tek bir biçimbirim ve BPE onu ikiye bölmüş; çünkü `im` ile `iz` tek
+başlarına da sık geçiyor. Sıklık morfoloji için iyi bir vekil, ama onun yerine
+geçmez. Eşit sözlük büyüklüğünde unigram LM morfolojiye BPE'den daha yakın
+bölüyor (Bostrom ve Durrett 2020).
+
+İki konvansiyon çarpışıyor. GPT'nin BPE tokenizer'ları da BERT'in WordPiece'i de
+önce boşluk ve noktalamada ön-tokenizasyon yapar; kelime sınırının token'a
+taşınması gerekir. GPT önceki boşluğu token'a yapıştırır (`' ev'`). Ham dizge
+üzerinde çalışan SentencePiece (Kudo ve Richardson 2018) ise görünür bir işaret
+koyar: `▁ev`.
+
+Türkçe harfler: sekize karşı on token. Yön genel; kesin katsayı tokenizer'a ve
+metnin kullandığı harflere bağlı.
+
+NFC: `ö` tek bir kod noktası (U+00F6, NFC) ya da `o` artı birleştirici çift nokta
+(U+0308, NFD) olarak saklanabilir. İkisi ekranda ayırt edilemez, Python'da eşit
+değil diye karşılaştırılır ve farklı sayıda token'a mal olur.
+`görüşebileceklerimiz` NFC'de 20 karakter ve 23 bayt, NFD'de 23 karakter ve 26
+bayt. macOS dosya adları, birçok PDF çıkarımı ve bazı web formları NFD verir.
+Bölümdeki her ölçüm NFC çağrısından sonra alındı. Lütfen yine de doğru Türkçe
+yazın; sadece bedelini bilin ve çok dilli bir sistemi asla yalnızca token
+sayısıyla kıyaslamayın.
+:::
+
+## Sezgi kontrolü · karakterler {.question}
+
+::: {.ask}
+Karakter sözlüğü minik, eğitim gerektirmez ve baytla çalışınca bilinmeyen sembolle karşılaşmaz. Peki neden herkes alt kelime kullanıyor?
+:::
+
+::: {.fragment}
+- **Çünkü asıl kısıt dizi uzunluğudur**
+- Attention'ın maliyeti dizi uzunluğunun *karesiyle*, katmandaki her şey ise doğrusal büyür (7. bölüm)
+- 5 kat uzun bir dizi, model genişliğine göre nerede durduğunuza bağlı olarak 5 ile 25 kat arası pahalıya mal olur — eninde sonunda kazanan terim kareseldir
+- [Alt kelimeler bir sıkıştırma şemasıdır: sözlük harcayıp kısa dizi satın alırlar]{.hl}
+:::
+
+::: {.notes}
+Cevabı açmadan önce öğrencilere bir dakika verin (tek tık).
+
+Karakter sözlüğü İngilizce için yaklaşık 100 sembol, baytla çalışırsanız 256.
+Karakter kümesi kapalı olduğunda sözlük dışı sorunu yaşamaz; bunu bayt garanti
+eder, elle seçilmiş bir alfabe etmez. Eğitim de gerektirmez.
+
+Tokenizer, sözlük büyüklüğü ile dizi uzunluğu arasındaki takası ayarlayan
+düğme. BPE bu düğmeyi bir insanın tahminine göre değil, verinin istatistiğine
+göre ayarlar. Karesel maliyet 7. bölümün (Transformer'lar ve Attention) konusu.
+:::
+
+## Üç birim boyutu, yan yana
+
+| | Karakterler | Alt kelimeler (BPE, WordPiece, Unigram) | Bütün kelimeler |
+|:--|:--|:--|:--|
+| **Sözlük büyüklüğü** | [ASCII için ~100; baytla 256]{.pro} | 30 bin–100 bin | [Sınırsız — asla kapanmaz]{.con} |
+| **Sözlük dışı kelimeler** | [Karakter kümesi kapalıysa doğmaz — bunu ancak bayt düzeyi garanti eder]{.pro} | [Nadir — daha kısa parçalara bölünür; yeter ki karakter kapsamı ya da bayta geri düşüş olsun]{.pro} | [Sürekli, üstelik en çok önemsediğiniz kelimelerde]{.con} |
+| **Dizi uzunluğu** | [5–10 kat daha uzun: hem daha yavaş hem daha pahalı]{.con} | [Orta]{.pro} | [En kısa]{.pro} |
+| **Birim başına anlam** | [Neredeyse yok — `p` hiçbir şey ifade etmez]{.con} | Kısmi; çoğu zaman biçimbirime benzer | [Bütün bir anlam birimi]{.pro} |
+| **Biçimbilimsel açıdan zengin diller** | Başa çıkar, ama pahalıya | [İyi başa çıkar — Türkçe eklerini ayırdı]{.pro} | [Kötü çuvallar]{.con} |
+| **Eğitim gerektirir mi** | [Hayır]{.pro} | [Evet, bir derlem üzerinde]{.con} | [Hayır]{.pro} |
+
+::: {.takeaway}
+Alt kelimeler kazanıyor, çünkü [içinde ölümcül bir hücre bulunmayan tek sütun onlar.]{.hl}
+:::
+
+::: {.notes}
+Karşılaşacağınız her tokenizer bu eksenin bir yerinde durur. Bütün tasarım
+problemi şu: iki uç, birbirinin tam tersi yönde başarısız olur.
+
+Bölümdeki tam tablodan iki ayrıntı. Karakter sözlüğü çok dilli Unicode'da on
+binlerce sembole çıkar; 256 ancak baytla çalışırsanız. Alt kelimelerin sözlük
+dışı hücresinin de bir koşulu var: bayta ya da karaktere geri düşüşü olmayan
+WordPiece hâlâ `[UNK]` üretebilir.
+
+Mühendislikteki uzlaşmalar genelde böyle kazanır: hiçbir şeyde en iyi oldukları
+için değil, kendilerini eletecek kadar kötü bir zayıflıkları olmadığı için.
+:::
+
+## Aynı tür birimi öğrenmenin üç yolu
+
+| | Neyi optimize eder | Yön | Nerede kullanılır |
+|:--|:--|:--|:--|
+| **BPE** | en *sık* komşu çifti birleştir | aşağıdan yukarı; sözlük büyür | GPT-2/3/4, RoBERTa, Llama |
+| **WordPiece** | derlem olabilirliğini en çok artıran çifti birleştir; kabaca $\frac{c(ab)}{c(a)\,c(b)}$'yi büyüt | aşağıdan yukarı | BERT, DistilBERT, ELECTRA |
+| **Unigram LM** | büyük bir aday kümeden başla; kaldırılması en az olabilirliğe mal olan parçaları EM ile *buda* | yukarıdan aşağı; sözlük küçülür | T5, ALBERT, Gemma, çoğu SentencePiece modeli |
+
+::: {.takeaway}
+Seçim BPE lehine kapanmış değil: eşit sözlük büyüklüğünde [unigram LM morfolojiye daha yakın bölüyor ve daha iyi dil modeli ön eğitiyor.]{.hl}
+:::
+
+::: {.src}
+Sennrich vd. 2016 · Schuster ve Nakajima 2012 · Kudo 2018 · Bostrom ve Durrett 2020
+:::
+
+::: {.notes}
+Aralarındaki fark ne ürettiklerinde değil, *neyi optimize ettiklerinde*. Bir
+modelin hangisini kullandığını bilmek, bölünmelerini öngörmenin yolu.
+
+Taşımaya değer iki sonuç. Birincisi: WordPiece'in oranı, parçaları tek başına
+zaten sık olan çiftleri cezalandırır; dolayısıyla ham sıklığa göre daha çok
+biçimbirim benzeri birim korur. İkincisi: her bölünmeye bir *olasılık* atayan
+tek algoritma Unigram LM. Alt kelime düzenlileştirmesini mümkün kılan da bu:
+her epoch'ta farklı bir bölünme örnekleyin, model tek bir keyfî bölünmeye aşırı
+öğrenmeyi bıraksın (Kudo 2018).
+
+SentencePiece (Kudo ve Richardson 2018) dördüncü bir algoritma değil; BPE ve
+Unigram LM'i uygulayan bir *kütüphane*. Katkısı, boşluklar dâhil ham dizgeyi
+girdi olarak almak. Token'larının boşluk olan yerde `▁` taşımasının nedeni bu.
+:::
+
+## Zipf yasası: on kelime derlemin beşte biri
+
+:::: {.columns}
+
+::: {.column width="55%"}
+```{=html}
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 420" width="100%" role="img" aria-label="20 Newsgroups için log-log eksenlerde sıraya karşı frekans: 50 örnek sıra düz bir çizgiye yakın düşüyor; baş kısımda kesikli alfa eşittir 1 referansının üstünde kalıyor" style="font-family:Space Grotesk, Segoe UI, system-ui, sans-serif">
+<line x1="78.0" y1="20" x2="78.0" y2="350" stroke="#E3E7EC" stroke-width="1"/>
+<text x="78.0" y="374" font-size="17" fill="#5B6272" text-anchor="middle">1</text>
+<line x1="78" y1="350.0" x2="568" y2="350.0" stroke="#E3E7EC" stroke-width="1"/>
+<text x="68" y="356.0" font-size="17" fill="#5B6272" text-anchor="end">1</text>
+<line x1="176.0" y1="20" x2="176.0" y2="350" stroke="#E3E7EC" stroke-width="1"/>
+<text x="176.0" y="374" font-size="17" fill="#5B6272" text-anchor="middle">10</text>
+<line x1="78" y1="285.3" x2="568" y2="285.3" stroke="#E3E7EC" stroke-width="1"/>
+<text x="68" y="291.3" font-size="17" fill="#5B6272" text-anchor="end">10</text>
+<line x1="274.0" y1="20" x2="274.0" y2="350" stroke="#E3E7EC" stroke-width="1"/>
+<text x="274.0" y="374" font-size="17" fill="#5B6272" text-anchor="middle">100</text>
+<line x1="78" y1="220.6" x2="568" y2="220.6" stroke="#E3E7EC" stroke-width="1"/>
+<text x="68" y="226.6" font-size="17" fill="#5B6272" text-anchor="end">100</text>
+<line x1="372.0" y1="20" x2="372.0" y2="350" stroke="#E3E7EC" stroke-width="1"/>
+<text x="372.0" y="374" font-size="17" fill="#5B6272" text-anchor="middle">1k</text>
+<line x1="78" y1="155.9" x2="568" y2="155.9" stroke="#E3E7EC" stroke-width="1"/>
+<text x="68" y="161.9" font-size="17" fill="#5B6272" text-anchor="end">1k</text>
+<line x1="470.0" y1="20" x2="470.0" y2="350" stroke="#E3E7EC" stroke-width="1"/>
+<text x="470.0" y="374" font-size="17" fill="#5B6272" text-anchor="middle">10k</text>
+<line x1="78" y1="91.2" x2="568" y2="91.2" stroke="#E3E7EC" stroke-width="1"/>
+<text x="68" y="97.2" font-size="17" fill="#5B6272" text-anchor="end">10k</text>
+<line x1="568.0" y1="20" x2="568.0" y2="350" stroke="#E3E7EC" stroke-width="1"/>
+<text x="568.0" y="374" font-size="17" fill="#5B6272" text-anchor="middle">100k</text>
+<line x1="78" y1="26.5" x2="568" y2="26.5" stroke="#E3E7EC" stroke-width="1"/>
+<text x="68" y="32.5" font-size="17" fill="#5B6272" text-anchor="end">100k</text>
+<line x1="78" y1="350" x2="568" y2="350" stroke="#5B6272" stroke-width="1.5"/>
+<line x1="78" y1="20" x2="78" y2="350" stroke="#5B6272" stroke-width="1.5"/>
+<line x1="78.0" y1="24.7" x2="556.9" y2="340.9" stroke="#B3453E" stroke-width="2" stroke-dasharray="7,5"/>
+<polyline points="78.0,24.7 107.5,39.9 124.8,44.3 137.0,47.2 146.5,47.7 154.3,50.4 160.8,58.0 166.5,59.3 176.0,63.3 183.8,71.7 193.3,80.8 201.0,84.1 209.6,89.5 218.3,92.3 226.8,99.7 236.1,103.9 245.3,106.1 254.3,111.6 263.4,117.3 272.7,124.8 282.1,133.4 291.5,142.5 300.9,149.9 310.4,156.7 319.8,162.9 329.2,169.1 338.7,174.7 348.2,181.3 357.6,186.4 367.1,192.1 376.6,198.3 386.0,204.4 395.5,211.3 405.0,218.2 414.5,225.5 424.0,232.7 433.5,240.6 443.0,249.3 452.5,257.4 462.0,267.3 471.5,277.9 481.0,288.3 490.5,299.6 500.0,304.8 509.5,319.1 519.0,330.5 528.5,330.5 537.9,350.0 547.4,350.0 556.9,350.0" fill="none" stroke="#1A1F33" stroke-width="1.2"/>
+<circle cx="78.0" cy="24.7" r="4.2" fill="#0E7C7B"/>
+<circle cx="107.5" cy="39.9" r="4.2" fill="#0E7C7B"/>
+<circle cx="124.8" cy="44.3" r="4.2" fill="#0E7C7B"/>
+<circle cx="137.0" cy="47.2" r="4.2" fill="#0E7C7B"/>
+<circle cx="146.5" cy="47.7" r="4.2" fill="#0E7C7B"/>
+<circle cx="154.3" cy="50.4" r="4.2" fill="#0E7C7B"/>
+<circle cx="160.8" cy="58.0" r="4.2" fill="#0E7C7B"/>
+<circle cx="166.5" cy="59.3" r="4.2" fill="#0E7C7B"/>
+<circle cx="176.0" cy="63.3" r="4.2" fill="#0E7C7B"/>
+<circle cx="183.8" cy="71.7" r="4.2" fill="#0E7C7B"/>
+<circle cx="193.3" cy="80.8" r="4.2" fill="#0E7C7B"/>
+<circle cx="201.0" cy="84.1" r="4.2" fill="#0E7C7B"/>
+<circle cx="209.6" cy="89.5" r="4.2" fill="#0E7C7B"/>
+<circle cx="218.3" cy="92.3" r="4.2" fill="#0E7C7B"/>
+<circle cx="226.8" cy="99.7" r="4.2" fill="#0E7C7B"/>
+<circle cx="236.1" cy="103.9" r="4.2" fill="#0E7C7B"/>
+<circle cx="245.3" cy="106.1" r="4.2" fill="#0E7C7B"/>
+<circle cx="254.3" cy="111.6" r="4.2" fill="#0E7C7B"/>
+<circle cx="263.4" cy="117.3" r="4.2" fill="#0E7C7B"/>
+<circle cx="272.7" cy="124.8" r="4.2" fill="#0E7C7B"/>
+<circle cx="282.1" cy="133.4" r="4.2" fill="#0E7C7B"/>
+<circle cx="291.5" cy="142.5" r="4.2" fill="#0E7C7B"/>
+<circle cx="300.9" cy="149.9" r="4.2" fill="#0E7C7B"/>
+<circle cx="310.4" cy="156.7" r="4.2" fill="#0E7C7B"/>
+<circle cx="319.8" cy="162.9" r="4.2" fill="#0E7C7B"/>
+<circle cx="329.2" cy="169.1" r="4.2" fill="#0E7C7B"/>
+<circle cx="338.7" cy="174.7" r="4.2" fill="#0E7C7B"/>
+<circle cx="348.2" cy="181.3" r="4.2" fill="#0E7C7B"/>
+<circle cx="357.6" cy="186.4" r="4.2" fill="#0E7C7B"/>
+<circle cx="367.1" cy="192.1" r="4.2" fill="#0E7C7B"/>
+<circle cx="376.6" cy="198.3" r="4.2" fill="#0E7C7B"/>
+<circle cx="386.0" cy="204.4" r="4.2" fill="#0E7C7B"/>
+<circle cx="395.5" cy="211.3" r="4.2" fill="#0E7C7B"/>
+<circle cx="405.0" cy="218.2" r="4.2" fill="#0E7C7B"/>
+<circle cx="414.5" cy="225.5" r="4.2" fill="#0E7C7B"/>
+<circle cx="424.0" cy="232.7" r="4.2" fill="#0E7C7B"/>
+<circle cx="433.5" cy="240.6" r="4.2" fill="#0E7C7B"/>
+<circle cx="443.0" cy="249.3" r="4.2" fill="#0E7C7B"/>
+<circle cx="452.5" cy="257.4" r="4.2" fill="#0E7C7B"/>
+<circle cx="462.0" cy="267.3" r="4.2" fill="#0E7C7B"/>
+<circle cx="471.5" cy="277.9" r="4.2" fill="#0E7C7B"/>
+<circle cx="481.0" cy="288.3" r="4.2" fill="#0E7C7B"/>
+<circle cx="490.5" cy="299.6" r="4.2" fill="#0E7C7B"/>
+<circle cx="500.0" cy="304.8" r="4.2" fill="#0E7C7B"/>
+<circle cx="509.5" cy="319.1" r="4.2" fill="#0E7C7B"/>
+<circle cx="519.0" cy="330.5" r="4.2" fill="#0E7C7B"/>
+<circle cx="528.5" cy="330.5" r="4.2" fill="#0E7C7B"/>
+<circle cx="537.9" cy="350.0" r="4.2" fill="#0E7C7B"/>
+<circle cx="547.4" cy="350.0" r="4.2" fill="#0E7C7B"/>
+<circle cx="556.9" cy="350.0" r="4.2" fill="#0E7C7B"/>
+<text x="252.3" y="201.8" font-size="18" fill="#B3453E" font-weight="600">α = 1</text>
+<text x="188.0" y="53.3" font-size="18" fill="#1A1F33" font-weight="600">10. sıra: 26.985</text>
+<text x="323.0" y="408" font-size="18" fill="#5B6272" text-anchor="middle">kelimenin sırası (1 = en sık)</text>
+<text x="18" y="185.0" font-size="18" fill="#5B6272" text-anchor="middle" transform="rotate(-90 18 185.0)">kaç kez geçtiği</text>
+</svg>
+```
+:::
+
+::: {.column .compact width="45%"}
+- 20 Newsgroups: 11.314 belge, 2,29 milyon token, 78.649 farklı tür
+- İlk 10 tür → bütün token'ların %20,99'u; ilk 1.000 → %71,04'ü; ilk 10.000 → %92,50'si
+- [Sözlüğün yarısı tam olarak bir kez geçiyor]{.hl}: türlerin %49,0'ı, token'ların %1,69'u
+- $f(r) \propto r^{-\alpha}$ — log-log eksenlerde düz bir çizgiye *yakın*. Kestirilmiş bir model olarak değil, bir *biçim* olarak alın
+:::
+
+::::
+
+::: {.src}
+Lang 1995 · Zipf 1949
+:::
+
+::: {.notes}
+Bölümün açılış sorusuyla başlayın. Kendi alanınızdan bir milyon kelime okuyup
+her farklı kelimeyi tutun. Kaç tane elde edersiniz? Daha işe yarar soru:
+ardından ikinci bir milyon okursanız, kaç *yeni* kelime çıkar? Tokenization'ı zor
+yapan, bu ikinci sorunun cevabı.
+
+Grafik, bölümdeki etkileşimli grafiğin durağan kopyası: 50 log-aralıklı örnek
+sıra. Kesikli çizgi, en sık kelimeden geçen temiz bir α = 1. Kitapta öğrenciler
+doğrusal eksene geçebiliyor: dağılım tek bir sivri uç ve dümdüz bir çizgiye
+dönüşüyor; sözlüğün neredeyse tamamı o dümdüz çizginin üzerinde yaşıyor.
+
+Tek seferlik kelimeler *hapax legomena*: saklamak zorunda olduğunuz her şeyin
+%49'u, göreceğinizin ise %1,7'si. İlk 100 tür → %46,99.
+
+"Yakın" kelimesi iş yapıyor. Onuncu sıradaki kelime 26.985 kez geçiyor; temiz bir
+α = 1'in öngöreceği yaklaşık 10.600 değil. Dağılımın başı yasadan daha yassı;
+Mandelbrot'un f(r) ∝ (r + b)^(−α) düzeltmesi tam da bunu soğurmak için var.
+:::
+
+## Üssü hesaplamanız gerekirse, regresyonla kestirmeyin
+
+::: {.lede}
+Log-log sıra-frekans grafiğinden en küçük karelerle eğim okumak, yanlış bir kuvvet yasası üssü elde etmenin standart yoludur — üç ayrı nedenle:
+:::
+
+1. Sıralama verinin bir dönüşümüdür; dolayısıyla sıra ile frekans **mekanik olarak ilişkilidir**
+2. Log dönüşümü hataları **heteroskedastik** yapar; bu da OLS varsayımını bozar
+3. Uzun, gürültülü kuyruktaki her nokta, iyi kestirilmiş baş **kadar ağırlık taşır**
+
+::: {.takeaway}
+Yayımlanmış çözüm: kestirilmiş bir alt kesim $x_{\min}$ ile maksimum olabilirlik ve bir Kolmogorov–Smirnov uyum testi — [$R^2$ değil.]{.hl}
+:::
+
+::: {.src}
+Clauset vd. 2009
+:::
+
+::: {.notes}
+Bu bölümde hiçbir şey üssün tam değerine bağlı değil; ders biçimin kendisi.
+:::
+
+## Heaps yasası: sözlük asla kapanmaz
+
+- Zipf, elinizde *zaten olan* derlemi betimler. *Bir sonraki milyon kaç yeni kelime getirir?* sorusu ikinci bir yasa ister
+- Derlemde ilerlerken ayrık türleri sayın: $|V| \approx K N^{\beta}$; $\beta$ tipik olarak 0,4 ile 0,6 arasında
+- Üs 1'in altında, ama $\mathrm{d}|V|/\mathrm{d}N = K\beta N^{\beta-1}$ her $N$ için kesinlikle pozitif; aynı zamanda sıfıra doğru küçülüyor
+- [Grafikte, büyümeyi bırakmasından çok önce düz görünür]{.hl} — tuzak da bu
+
+::: {.takeaway}
+Yeni kelimelerle karşılaşmayı bıraktığınız bir derlem büyüklüğü yoktur. Yalnızca onlarla *hızlı* karşılaşmayı bıraktığınız bir büyüklük vardır.
+:::
+
+::: {.src}
+Heaps 1978
+:::
+
+::: {.notes}
+Zipf ve Heaps'ten doğrudan üç sonuç çıkıyor ve bu üçü modern NLP'nin her şeyini
+biçimlendirdi:
+
+1. Kelime düzeyinde bir sözlük asla tamamlanamaz. Yeni kelimeler sonsuza kadar
+   gelir: isimler, parça numaraları, yazım hataları, bileşikler. Alt kelimelerin
+   gerekçesi, tek cümlede, bu.
+2. Sözlüğün büyük kısmı istatistiksel olarak işe yaramaz. Bir kez görülmüş kelime
+   hiçbir şeyin kestirimini desteklemez. `min_df` bunun için var ve matrisi stop
+   word atmaktan çok daha fazla kırpar: sütunlarınızın çoğunu silerken metninizin
+   çok azını siler.
+3. Sıklık ile bilgilendiricilik neredeyse zıt. En çok gördüğünüz kelimeler size
+   en az şeyi söyler. TF-IDF'in tohumu bu gözlem.
+
+Bölüm, her 10.000 token'da bir ayrık tür sayısını kaydeden kısa döngüyü
+gösteriyor.
+:::
+
+## Her zaman ilk 50 listenize bakın
+
+:::: {.columns}
+
+::: {.column width="36%"}
+::: {.stat}
+[62.043]{.bignum}
+
+`'ax` geçişi — en sık **ikinci** token; *to*, *a* ve *of*'un önünde
+:::
+:::
+
+::: {.column width="64%"}
+- Bu bir kelime değil: 11.314 belgenin 13'ünden geliyor — bozuk bir ikili gönderinin alıntılanmış bir kopyası ve onu geri alıntılayan on iki cevap
+- En büyük tek belge 62.043 geçişin 11.147'sini karşılıyor
+- Terim frekansına göre İngilizcenin en önemli ikinci kelimesi. Belge frekansına göre belgelerin %0,1'inde geçiyor
+- Baştaki kesme işareti *bizim* — `[a-z']+` düzenli ifademiz; varsayılan `token_pattern` `ax` verir
+:::
+
+::::
+
+::: {.takeaway}
+[“Sık geçiyor” ile “çok yerde geçiyor”]{.hl} arasındaki uçurum, bir sonraki kısmın üzerine kurulduğu şeyin ta kendisi.
+:::
+
+::: {.notes}
+Ünlü bir kıyaslama veri kümesinde otuz yıldır duran gerçek bir hata.
+
+Kesme işareti inceliği noktayı zayıflatmıyor, keskinleştiriyor. Düzenli
+ifademiz `'` işaretini kelime karakteri sayıyor; derlemdeki çöp ile kendi
+tokenizer tercihimiz birleşerek bu dizgiyi üretiyor. Kusur verinin içinde, ama
+biçimi bir ön işleme kararı. Bu kısmın tamamının dersi de bu.
+
+Bölümün ifadesiyle alışkanlık: her zaman ilk 50 listenize bakın.
+:::
+
+## Karakter dizisinden vektöre: altı adım
+
+::: {.lede}
+Dört bakım kaydı — d1 `pompa yine arızalandı` · d2 `pompa yine değiştirildi` · d3 `vana yine arızalandı` · d4 `salmastra yine kaçırdı ve onarıldı`
+:::
+
+| Adım | d1 = `pompa yine arızalandı` için | Ne yapar |
+|:--|:--|:--|
+| Token'lara ayır | `pompa` · `yine` · `arızalandı` | dizi → birimler |
+| **1** · Dizin | `arızalandı`→0, `pompa`→4, `yine`→8 | her farklı token bir adres alır |
+| **2** · One-hot | `pompa` = `[0 0 0 0 1 0 0 0 0]` | vektör olarak kelime |
+| **3** · Topla = sayımlar | `[1 0 0 0 1 0 0 0 1]` | kelime sırası gitti |
+| **4** · [TF-IDF ağırlıkları]{.hl} | `[1,51 0 … 1,51 … 1,00]` | nadir kelimeler ağır basar |
+| **5** · [L2 normalleştir]{.hl} | `[0,64 0 … 0,64 … 0,42]` | belge uzunluğu gitti |
+| **6** · Karşılaştır | cos(d1, d3) = 0,528 | arama, kümeleme, sınıflandırma yalnızca bunu okur |
+
+::: {.notes}
+Bölümün çekirdeği: dört kısa bakım kaydını karakter dizisi olmaktan çıkarıp
+üzerinde uzaklık hesaplayabileceğiniz vektörlere kadar götürüyoruz. Hiçbir adım
+atlanmıyor, her ara hesap gösteriliyor.
+
+Bu tablo bölümdeki akış şeklinin karşılığı. Her sayı, kodun d1 için fiilen
+ürettiği sayı. Sözlük dizini Unicode kod noktası sırasına göre dizili;
+dolayısıyla `arızalandı` 0., `pompa` 4., `yine` 8. sütun.
+
+Vurgulu iki adım *istatistiğin* devreye girdiği tek yer. Geri kalan her şey
+defter tutmaktan ibaret.
+:::
+
+## 1–2. adım · bir dizin, sonra one-hot vektör
+
+```text
+['arızalandı' 'değiştirildi' 'kaçırdı' 'onarıldı' 'pompa' 'salmastra'
+ 'vana' 've' 'yine']
+```
+
+- Dokuz kelime: buradan sonraki her vektör $\mathbb{R}^9$ içinde. Gerçek bir derlemde bu sayı 30.000–500.000
+
+```text
+pompa : [0 0 0 0 1 0 0 0 0]
+vana  : [0 0 0 0 0 0 1 0 0]
+        ------------------- konum konum çarp
+        [0 0 0 0 0 0 0 0 0]  -> toplam = 0
+```
+
+- [Her kelime diğer her kelimeye diktir]{.hl}: `pompa`, `vana`'ya tam olarak `salmastra`'ya olduğu kadar benzer
+- Bir arşivleme sistemi, anlam sistemi değil. Onu düzeltmek 3. bölümün bütün konusu
+
+::: {.notes}
+1. adımda anlam yok. Farklı her token'ı topluyor, sıralıyor ve her birine bir
+tam sayı veriyoruz: kelimenin *adresi*. `CountVectorizer().fit_transform(corpus)`
+ve ardından `get_feature_names_out()` slayttaki çıktıyı basıyor.
+
+Buradaki sıra Türkçe alfabetik sıra değil, Unicode kod noktası sırası. `ç`,
+`ğ`, `ı`, `ö`, `ş`, `ü` ASCII dışında kaldığı için `z`'den *sonra* gelir. Model
+bunu umursamaz; ama çıktıyı gözle tararken siz umursarsınız.
+
+2. adım. Bir indeks vektör değildir; bir dosya dolabının çekmece numarası
+üzerinde aritmetik yapamayız. Tek bir kelimenin en basit kodlaması: kelimenin
+adresinde tek bir 1, geri kalanı sıfır.
+
+Meşru bir vektör, ama tek başına neredeyse işe yaramaz. *Herhangi* iki farklı
+one-hot vektörün iç çarpımı sıfırdır; birindeki tek 1 her zaman diğerindeki bir
+0'a denk gelir. Temsil hiçbir benzerlik kavramı içermez, yalnızca kimlik içerir.
+`pompa`'nın vektörü *kelimenin nerede tutulduğunu* söyler, neye benzediğini değil.
+
+Öğrencilere bu cümleyi akıllarında tutmalarını söyleyin: onu düzeltmek 3.
+bölümün (Embedding'ler) bütün konusu.
+:::
+
+## 3. adım · belge, one-hot'larının toplamıdır
+
+:::: {.columns}
+
+::: {.column width="52%"}
+- Bir belgedeki her token'ın one-hot vektörünü toplayın: bir **sayım vektörü**
+- İşte **bag-of-words**: token'ların çoklu kümesi, sıra atılmış hâlde
+- Dört belge için de yapın: [belge-terim matrisi]{.hl}, klasik NLP'nin merkezî nesnesi
+- İstatistikçinin **tasarım matrisi**: belgeler gözlem, kelimeler öznitelik
+:::
+
+::: {.column width="48%"}
+```text
+                d1  d2  d3  d4
+arızalandı       1   0   1   0
+değiştirildi     0   1   0   0
+kaçırdı          0   0   0   1
+onarıldı         0   0   0   1
+pompa            1   1   0   0
+salmastra        0   0   0   1
+vana             0   0   1   0
+ve               0   0   0   1
+yine             1   1   1   1
+```
+:::
+
+::::
+
+::: {.notes}
+Bir kelime, bir vektör. Ama yola *belgeleri* karşılaştırmak için çıktık ve bir
+belge aynı anda birçok kelime. En basit cevap işe yarıyor: toplayın.
+
+`d1 tokens: ['pompa', 'yine', 'arızalandı']` → `d1 vector: [1 0 0 0 1 0 0 0 1]`.
+
+Matris sayfaya sığsın diye devrik gösterildi; aslında 4 belge × 9 terim.
+Satırlar belgeler, sütunlar kelimeler.
+
+Feature (öznitelik), verinizin ölçülmüş bir sütunu; burada bir kelime.
+İstatistikçiler için başka bir isim altındaki öngörücü değişken. Birbiriyle
+ilişkili, çoğu sıfır olan çok sayıda öngörücüyle regresyon hakkında bildikleri
+her şey burada geçerli.
+:::
+
+## 4. adım · sayımlar yanlış sayılardır
+
+::: {.lede}
+`yine` dört belgenin hepsinde geçiyor ve hiçbir şeyi ayırt etmiyor; d3'ü ayırt eden tek şey `vana`. Ham sayımlar ikisine aynı muameleyi yapar.
+:::
+
+$$\mathrm{idf}(t) = \ln\!\left(\frac{1 + n}{1 + \mathrm{df}(t)}\right) + 1$$
+
+:::: {.columns}
+
+::: {.column .compact width="52%"}
+- $n = 4$. `pompa` 2 belgede geçiyor: $\ln\frac{5}{3} + 1 = 1{,}511$
+- `yine` dördünde birden: $\ln\frac{5}{5} + 1 = 1$ — [silinmiyor, aşağı çekiliyor]{.hl}
+- $1+$ terimleri, her terimi birer kez içeren fazladan bir belge gibi davranır
+:::
+
+::: {.column width="48%"}
+| 20 Newsgroups'ta | df | df/N | idf |
+|:--|--:|--:|--:|
+| `the` | 9.477 | 0,838 | 1,18 |
+| `is` | 7.034 | 0,622 | 1,48 |
+| `car` | 394 | 0,035 | 4,35 |
+| `encryption` | 169 | 0,015 | 5,20 |
+| `gravitational` | 8 | 0,001 | 8,14 |
+:::
+
+::::
+
+::: {.src}
+Spärck Jones 1972
+:::
+
+::: {.notes}
+İstediğimiz ağırlık, bir kelime *bu belgede* sık ve *belgeler arasında* nadir
+olduğunda yüksek olmalı. Bunu iki çarpana ayırmak TF-IDF'i verir.
+
+Terim frekansı *ham* sayım. scikit-learn burada belge uzunluğuna bölmüyor, çünkü
+uzunluğu 5. adımdaki L2 normalleştirmesi hallediyor. Birçok ders kitabı
+tf = c(t,d)/|d| ya da 1 + log c(t,d) tanımlar ve sayılar farklı çıkar. SMART
+gösteriminde — tf × idf × normalleştirme — scikit-learn'ün varsayılanı kabaca
+`ntc` (doğal tf, düzleştirilmiş idf, kosinüs normalleştirmesi); klasik bilgi
+erişimi varsayılanı ise logaritmik tf'li `ltc`. `sublinear_tf=True` sizi n'den
+l'ye taşır.
+
+Document frequency (df, belge frekansı): kelimenin en az bir kez geçtiği belge
+sayısı. Ağırlığın df arttıkça düşmesini istiyoruz, o hâlde tersini alıyoruz. Ham
+tersleme fazla sert; bu yüzden logaritma alıyoruz (Spärck Jones 1972).
+
+Formülün okuması: o hayalî fazladan belge, df'in hiç sıfır olamamasının ve hiçbir
+ağırlığın kaçamamasının nedeni. 6. bölümde Laplace düzleştirmesi olarak yeniden
+karşılaşacağınız aynı bire-ekleme fikri. Sondaki +1, her yerde geçen bir kelimenin
+0 yerine 1 ağırlık almasını garantiler. Bu scikit-learn'ün birebir formülü; başka
+kütüphaneler ayrıntıda farklılaşır. "Sayılarım neden tutmuyor" sorusunun klasik
+kaynağı bu.
+
+Hesap: ln(1,667) + 1 = 0,511 + 1 = 1,511. `yine` için oran 1'e, logaritma 0'a
+çöküyor ve terim 1'lik taban ağırlığın üzerinde kalıyor: `pompa` bir buçuk oy
+kullanırken o bir oy kullanıyor. Oyuncak derlemde tek bir belgeye özgü her kelime
+1,9163 alıyor; elle hesap ile `idf_` arasındaki en büyük mutlak fark 0,0.
+
+Kütüphanecinin versiyonu: "pompalarla ilgili kitabı" isteyin. *ile* kelimesi rafı
+hiç daraltmaz, *pompalar* bir metrelik rafa indirir. IDF, bir kelimenin aramayı ne
+kadar daralttığının sayısı.
+
+Kitaptaki IDF gezgini: eğri belgelerin ~%20'sinin üzerinde düz. Bir kelime
+yaygınlaştıktan sonra daha da yaygınlaşması neredeyse hiçbir şeyi değiştirmez.
+Bütün hareket ilk birkaç yüzdede, içerik kelimelerinin yaşadığı yerde.
+:::
+
+## Sezgi kontrolü · logaritma {.question}
+
+::: {.ask}
+IDF neden logaritma kullanıyor?
+:::
+
+::: {.fragment}
+Zayıf cevap: *“ağırlık çok büyümesin diye.”*
+:::
+
+::: {.fragment}
+- **Azalan getiri** — 10.000 belgenin 1'inde ile 10'unda geçmek arasında özgüllük farkı büyük; 5.000 ile 5.010 arasında hiç yok
+- **Kılık değiştirmiş bir olasılık** — $\log \frac{n}{\mathrm{df}(t)} = -\log P(t)$: terimi görmenin *öz bilgisi* (self-information)
+- **Zipf halkayı kapatır** — bu kadar çarpık bir ölçekte logaritma farkı "kaç adet" yerine "kaç kat" cinsinden ölçer; gelir ya da şehir nüfusunda olduğu gibi
+- Spärck Jones IDF'i 1972'de görgül gerekçelerle önerdi; [kuram sonradan tersine mühendislikle kuruldu]{.hl}
+:::
+
+::: {.src}
+Spärck Jones 1972 · Robertson 2004
+:::
+
+::: {.notes}
+İki tık: önce zayıf cevap, sonra iyisi. Alanın en sık sorulan mülakat
+sorularından biri.
+
+Azalan getiri: bilgilendiricilik nadirliğin doğrusal fonksiyonu değil. Logaritma
+aralığın üst ucunu sıkıştırır, alt ucunda çözünürlüğü korur; özgüllüğün gerçekte
+davrandığı biçim de bu.
+
+Olasılık: df(t)/n, rastgele bir belgenin t'yi içerme olasılığını kestiriyorsa
+log(n/df) = −log P(t). Nadir olaylar daha fazla bilgi taşır. Logaritma sayıları
+evcilleştirmek için bir numara değil, bilginin kendisi. Konunun titiz işlenişi
+Robertson (2004).
+
+Zipf: birkaç kelimenin sayımı devasa, on binlercesininki minicik. Böyle çarpık bir
+ölçekte çıplak farklar yanıltıcı; logaritma dağılımı düz bir çizgiye oturtur.
+Geliri ya da şehir nüfusunu da bu yüzden log dönüştürürsünüz: orada da birkaç dev,
+geri kalan herkesi ölçekten siler.
+:::
+
+## 5. adım · çarp, sonra normalleştir
+
+```text
+counts        : [1 0 0 0 1 0 0 0 1]
+times idf     : [1.5108 0. 0. 0. 1.5108 0. 0. 0. 1.]
+l2 norm       : 2.3591
+normalized    : [0.6404 0. 0. 0. 0.6404 0. 0. 0. 0.4239]
+sklearn row d1: [0.6404 0. 0. 0. 0.6404 0. 0. 0. 0.4239]
+```
+
+$$\lVert v \rVert_2 = \sqrt{1{,}5108^2 + 1{,}5108^2 + 1{,}0000^2} \approx 2{,}3591 \qquad \tfrac{1{,}5108}{2{,}3591} = 0{,}6404 \qquad \tfrac{1{,}0000}{2{,}3591} = 0{,}4239$$
+
+- Elle yapılan hesap ile `TfidfVectorizer` her basamakta aynı sonucu veriyor: kütüphanenin içinde sihir yok
+- [L2 normalleştirme bir son rötuş değil]{.hl}: o olmadan uzun bir belge, sırf uzun olduğu için büyük bir vektöre sahip olur
+- Birim küre üzerinde yalnızca *yön* — yani kelime bileşimi — bilgi taşır
+
+::: {.notes}
+TF-IDF hücre hücre hesaplanan çarpım. d1'in sıfırdan farklı üç konumu var, her
+birinin sayımı 1: `arızalandı` için 1,5108, `pompa` için 1,5108, `yine` için
+1,0000. Uzunluk, dokuz boyuta genişletilmiş sıradan Pisagor uzunluğu: kareleyin,
+toplayın, karekökünü alın: √(2,28259 + 2,28259 + 1,00000) = √5,56518 ≈ 2,3591.
+Ara değerler gösterim için yuvarlandı; tam hassasiyetle norm 2,35906509… ve
+kütüphanenin kullandığı da bu.
+
+Sıfır olan altı giriş hiçbir şey katmıyor; 200.000 sütunda bile hesabın ucuz
+kalmasının sebebi bu.
+
+Normalleştirme olmadan her benzerlik karşılaştırması bir belge uzunluğu
+karşılaştırmasına dönüşür. Her belgeyi aynı yarıçaplı bir küreye oturtmayı
+düşünün: 50 kelimelik rapor da 5.000 kelimelik rapor da birim *uzunluğa* iner.
+Bileşenlerin kendisi değil, karelerinin toplamı 1 olur.
+
+Küreye oturtulamayan tek belge türü: boş olan ya da bütün kelimeleri sözlük dışı
+kalan belge. Normu 0, kosinüsü 0/0, yani tanımsız. scikit-learn sıfır satır ve 0
+kosinüs döndürür; bu bir cevap değil, bir uzlaşım. Derleminizde böyle belgeler
+varsa, üzerine kurulan benzerliğe güvenmeden önce onları sayın.
+
+Bu bileşim denenmiş tek bileşim değil. Salton ve Buckley (1988) geniş bir
+ağırlıklandırma ailesini deneysel olarak karşılaştırdı; kabaca kazanan bu oldu.
+
+Kitaptaki matris gezgini: TF-IDF'te `yine` sütunu her satırdaki en açık sıfırdan
+farklı ağırlığa solar; yalnızca d3'te geçen `vana` matrisin en koyu hücresi olur.
+:::
+
+## 6. adım · kosinüs benzerliği
+
+$$\cos(a, b) = \frac{a \cdot b}{\lVert a \rVert \, \lVert b \rVert} = \sum_{i} a_i b_i \quad \text{(ikisi de birim uzunluktaysa)}$$
+
+$$\cos(\text{d1}, \text{d3}) = \underbrace{0{,}6404 \times 0{,}5729}_{\texttt{arızalandı}} + \underbrace{0{,}4239 \times 0{,}3792}_{\texttt{yine}} = 0{,}3669 + 0{,}1607 = 0{,}528$$
+
+- Benzerliğin %70'ini `arızalandı`, %30'unu `yine` sağlıyor — üstelik ikisi de her iki belgede tam olarak birer kez geçiyor
+- [Ortak kelimelerden hangisinin kanıt sayılacağına ağırlıklandırma karar verir]{.hl}
+- d1 ile d4'ün tek ortak kelimesi `yine`: ham sayımda kosinüs 0,26, TF-IDF'te 0,11
+- Kosinüs bir açının kosinüsüdür — kalibre edilmiş bir "%26 benzer" değil
+
+::: {.notes}
+Artık her belge R⁹ içinde bir nokta. Nihayet şu soruyu sorabiliyoruz: bu iki belge
+aynı şeyden mi bahsediyor? 1 aynı yön, 0 ortak kelime yok demek.
+
+Toplama yalnızca *iki* vektörün de sıfırdan farklı olduğu konumlar katkı
+verebilir; dokuz boyutlu toplamın tam iki canlı terimi var. Ham sayımlarda iki
+ortak kelime eşit katkı verirdi.
+
+Bölümdeki tam matrisler, TF-IDF ve parantez içinde ham sayım:
+
+- d1–d2 0,528 (0,667); d1–d3 0,528 (0,667); d1–d4 0,107 (0,258)
+- d2–d3 0,144 (0,333); d2–d4 0,096 (0,258); d3–d4 0,096 (0,258)
+
+Bütün çiftler düşüyor. En çok düşenler, tek ortak paydası bir stop word olanlar.
+:::
+
+## Neden kosinüs, neden Öklid uzaklığı değil?
+
+```{=html}
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 345" width="100%" role="img" aria-label="Solda: pompa ve vana üzerinde ham sayım vektörleri; 2,1 noktasındaki A ile 20,10 noktasındaki B tek bir ışın üzerinde, yine de Öklid uzaklığı A ile ilgisiz C (1,4) arasına 3,16, A ile B arasına 20,12 koyuyor. Sağda: L2 normalleştirmesinden sonra A ile B birim çember üzerinde çakışıyor ve C ile arada yalnızca 49,4 derecelik açı kalıyor." style="font-family:Space Grotesk, Segoe UI, system-ui, sans-serif">
+<defs><marker id="geo-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5B6272"/></marker><marker id="geo-ma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0E7C7B"/></marker><marker id="geo-mr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B3453E"/></marker></defs>
+<text x="10" y="26" font-size="19" font-weight="600" fill="#5B6272" letter-spacing="0.04em">HAM SAYIM VEKTÖRLERİ · UZUNLUK BASKIN</text>
+<path d="M50,315 H315" stroke="#5B6272" stroke-width="1.5" marker-end="url(#geo-m)"/>
+<path d="M50,315 V58" stroke="#5B6272" stroke-width="1.5" marker-end="url(#geo-m)"/>
+<text x="312" y="305" font-size="18" fill="#5B6272" text-anchor="end">pompa</text>
+<text x="60" y="66" font-size="18" fill="#5B6272">vana</text>
+<path d="M50,315 L280.0,100.0" stroke="#0E7C7B" stroke-width="2.5"/>
+<path d="M50,315 L61.5,229.0" stroke="#B3453E" stroke-width="2.5"/>
+<path d="M73.0,293.5 L61.5,229.0" stroke="#B3453E" stroke-width="1.8" stroke-dasharray="5,4"/>
+<circle cx="73.0" cy="293.5" r="6" fill="#0E7C7B"/>
+<circle cx="280.0" cy="100.0" r="6" fill="#0E7C7B"/>
+<circle cx="61.5" cy="229.0" r="6" fill="#B3453E"/>
+<text x="85.0" y="307.5" font-size="20" font-weight="700" fill="#0E7C7B">A <tspan font-size="16" font-weight="400" fill="#5B6272">(2, 1)</tspan></text>
+<text x="266.0" y="106.0" font-size="20" font-weight="700" fill="#0E7C7B" text-anchor="end">B <tspan font-size="16" font-weight="400" fill="#5B6272">(20, 10)</tspan></text>
+<text x="73.5" y="227.0" font-size="20" font-weight="700" fill="#B3453E">C <tspan font-size="16" font-weight="400" fill="#5B6272">(1, 4)</tspan></text>
+<text x="325" y="92" font-size="17" font-weight="600" fill="#0E7C7B" style="font-family:Space Grotesk, Segoe UI, system-ui, sans-serif">A · kısa rapor</text>
+<text x="325" y="118" font-size="17" font-weight="600" fill="#0E7C7B" style="font-family:Space Grotesk, Segoe UI, system-ui, sans-serif">B · aynı rapor, 10× daha uzun</text>
+<text x="325" y="170" font-size="19" font-weight="600" fill="#1A1F33" style="font-family:Space Grotesk, Segoe UI, system-ui, sans-serif">Öklid diyor ki:</text>
+<text x="325" y="200" font-size="19" font-weight="400" fill="#1A1F33" style="font-family:JetBrains Mono, ui-monospace, monospace">‖A − C‖ = 3,16</text>
+<text x="325" y="224" font-size="16" font-weight="600" fill="#B3453E" style="font-family:Space Grotesk, Segoe UI, system-ui, sans-serif">en yakını — ama C başka bir konu</text>
+<text x="325" y="262" font-size="19" font-weight="400" fill="#1A1F33" style="font-family:JetBrains Mono, ui-monospace, monospace">‖A − B‖ = 20,12</text>
+<text x="325" y="286" font-size="16" font-weight="400" fill="#5B6272" style="font-family:Space Grotesk, Segoe UI, system-ui, sans-serif">uzakta — ama B aynı rapor</text>
+<path d="M605,10 V335" stroke="#C9D0D8" stroke-width="1.5"/>
+<text x="630" y="26" font-size="19" font-weight="600" fill="#0E7C7B" letter-spacing="0.04em">L2 NORMALLEŞTİRMEDEN SONRA · SADECE YÖN</text>
+<path d="M670,300 H1150" stroke="#5B6272" stroke-width="1.5" marker-end="url(#geo-m)"/>
+<path d="M670,300 V44" stroke="#5B6272" stroke-width="1.5" marker-end="url(#geo-m)"/>
+<path d="M905,300 A235,235 0 0,0 670,65" fill="none" stroke="#5B6272" stroke-width="1.5" stroke-dasharray="6,5"/>
+<text x="874.0" y="143.0" font-size="17" fill="#5B6272">birim çember</text>
+<path d="M670,300 L880.2,194.9" stroke="#0E7C7B" stroke-width="3" marker-end="url(#geo-ma)"/>
+<path d="M670,300 L727.0,72.0" stroke="#B3453E" stroke-width="3" marker-end="url(#geo-mr)"/>
+<text x="894.2" y="200.9" font-size="21" font-weight="700" fill="#0E7C7B">a = b</text>
+<text x="741.0" y="76.0" font-size="21" font-weight="700" fill="#B3453E">c</text>
+<path d="M746.0,262.0 A85,85 0 0,0 690.6,217.5" fill="none" stroke="#1A1F33" stroke-width="1.8"/>
+<text x="730.7" y="224.3" font-size="18" font-weight="600" fill="#1A1F33">49,4°</text>
+<text x="630" y="332" font-size="17" fill="#5B6272">A ile B aynı noktaya düşer; geriye yalnızca açı kalır</text>
+</svg>
+```
+
+::: {.takeaway}
+Birim vektörlerde $\lVert a - b \rVert^2 = 2 - 2\cos(a,b)$: burada $2 - 2(0{,}651) = 0{,}698$, yani 0,836 uzaklık. [Öklid ve kosinüs artık her çifti aynı sıralar — vektörleri önceden normalleştirdiyseniz.]{.hl}
+:::
+
+::: {.notes}
+Çünkü Öklid uzaklığına belge uzunluğu hâkim olur. Aynı arızayı anlatan 50
+kelimelik bir olay raporu ile 5.000 kelimelik bir rapor, vektör *büyüklüğü*
+bakımından muazzam, *yön* bakımından neredeyse hiç farklı değil. Kosinüs yalnızca
+yöne bakar: "bu belge ne hakkında?" diye sorar, "bundan ne kadar var?" diye değil.
+
+Şekil: A ile B aynı raporun iki uzunluğu, tek bir ışın üzerinde. Buna rağmen Öklid
+uzaklığı A'yı, bambaşka bir şeyden söz eden C'ye altı kattan fazla yakın
+gösteriyor. L2 normalleştirmesinden sonra A ile B aynı nokta oluyor; ölçülecek tek
+şey açı kalıyor.
+
+2 − 2cos nereden geliyor, bir kez yapmaya değer:
+‖a − b‖² = (a − b)·(a − b) = a·a − 2(a·b) + b·b. Birim vektörlerde a·a = b·b = 1
+ve a·b doğrudan kosinüs; dolayısıyla ‖a − b‖² = 1 − 2cos + 1 = 2 − 2cos.
+
+Uzaklık benzerliğin kesin azalan bir fonksiyonu: kosinüs 0'dan 1'e tırmanırken
+kareli uzaklık 2'den 0'a düşer. Yani Öklid'e göre ve kosinüse göre en yakın komşu
+araması aynı sıralı listeyi döndürür — vektörler önceden normalleştirilmişse.
+Normalleştirmeyi atlarsanız L2 uzaklığı üzerine kurulmuş bir erişim indeksi,
+sessizce konuya göre değil belge uzunluğuna göre sıralamaya başlar. Bu özdeşlik
+3. bölümde, biri kosinüs indeksini L2 indeksiyle değiştirdiğinde tekrar çıkacak.
+Mülakatçıların genelde aradığı cevap da bu denklik.
+:::
+
+## Bag-of-words'ün yapamadıkları
+
+| Temsil edemediği | İki belge | Bag-of-words'te |
+|:--|:--|:--|
+| **Kelime sırası** | *pompa arızalandı ve vana sağlam* / *vana arızalandı ve pompa sağlam* | aynı nokta: aynı vektör, kosinüs 1,0 |
+| **Olumsuzlamanın kapsamı** | *sızıntı tespit edilmiş değil* / *sızıntı tespit edilmiş* | kosinüs 0,866 (sayım), 0,777 (TF-IDF) — *değil* stop word ise %100 |
+| **Eş anlamlılık** | *pompa arızalandı* / *pompa bozuldu* | `pompa` dışında hiçbir şey paylaşmaz |
+| **Çok anlamlılık** | şirket olarak `Apple` / meyve olarak `apple` | aynı sütun |
+
+::: {.takeaway}
+İkili n-gram'lar bir miktarını geri satın alır (ilk çiftte kosinüs 0,25), ama gerçek bir derlemde öznitelik sayısını 32.318'den 249.522'ye çıkardı — [ve doğruluğu düşürdü.]{.hl} Yerel bir yama; gerçek çözüm 7. bölüm.
+:::
+
+::: {.notes}
+Bu sınırlar, kitabın geri kalanının var olma sebebini oluşturacak kadar ağır.
+
+Kelime sırası: "kötü temsil eder" değil, hiç temsil edemez. Birbirinin tam tersi
+ekipmanın arızalandığını söyleyen iki rapor uzayda aynı nokta. Ne kadar iyi olursa
+olsun hiçbir sınıflandırıcı bunları ayıramaz; bilgi sınıflandırıcı görmeden önce
+yok edildi. İkili n-gram'larla sözlük 5'ten 7'ye çıkıyor ve çift ayırt edilebilir
+hâle geliyor. Gerçek bir derlemde ise sözlük patlıyor (7,7 kat). Gerçek çözüm 7.
+bölüm (Transformer'lar ve Attention).
+
+Olumsuzlama: `değil` de diğerleri gibi bir öznitelik; bir sınıflandırıcı
+varlığının olasılıkları kaydırdığını öğrenebilir. Kelime torbasının geri
+getiremediği şey *neyin* olumsuzlandığı. TF-IDF biraz yardım ediyor, yeterli
+olmaktan çok uzak. Çoğu hazır Türkçe stop word listesinde *değil* var. Bir metin
+sınıflandırıcısının güvenlik kritik bir incelemede sessizce çuvallamasının en
+yaygın yolu bu; üretimde gerçek paraya mal olur.
+
+Türkçede olumsuzluk iki ayrı yoldan gelir ve ikisi de ayrı biçimde tehlikeli.
+`değil` ayrı bir kelime; stop word listesi onu sessizce siler. `-me-/-ma-` ise
+gövdeye yapışan bir ek: `çalışıyor` ile `çalışmıyor` kelime düzeyinde iki ayrı
+token — bu iyi haber — ama alt kelime tokenization'ından sonra fark tek bir
+parçaya iner.
+
+Eş anlamlılık ve çok anlamlılık: her kelime kendi başına bir ada; tam olarak 2.
+adımdaki one-hot vektörlerde gördüğümüz gibi. 3. bölümün çözdüğü problem bu.
+:::
+
+## Bütün bunların hâlâ bir önemi var mı?
+
+::: {.lede}
+Gerçek bir deney: dört haber grubu, 2.327 eğitim ve 1.550 test belgesi, lojistik regresyon, hiçbir ayar yapılmadı.
+:::
+
+::: {.roomy}
+| Kurulum | Doğruluk | Öznitelik |
+|:--|--:|--:|
+| raw counts | 0,767 | 32.318 |
+| counts + stop words | 0,795 | 32.014 |
+| tf-idf | 0,831 | 32.318 |
+| tf-idf + stop words | **0,853** | 32.014 |
+| tf-idf + bigrams | 0,819 | 249.522 |
+| tf-idf + sublinear tf | 0,843 | 32.318 |
+:::
+
+::: {.notes}
+Var — ve öğrenciler bunu görüşle değil sayılarla söyleyebilmeli.
+
+Kategoriler sci.med, sci.space, rec.autos ve talk.politics.guns; başlıklar,
+imzalar ve alıntılar çıkarıldı. Her kurulum bir scikit-learn hattı: bir
+vektörleştirici ve `LogisticRegression(max_iter=2000)`. Sonuçlar belirlenimci:
+varsayılan lbfgs çözücüsü hiç rastgelelik kullanmıyor. Kurulum adları koddaki
+etiketler; kodun tamamı bölümde, 4. alıştırma onu yeniden üretiyor.
+
+Sonraki slayda geçmeden sınıfa altı satırı okutun: siz ne sonuç çıkarırdınız?
+:::
+
+## Dört ders — ve onlara ne kadar güvenilir
+
+1. **TF-IDF, ham sayımlara göre 6,4 doğruluk puanı ediyor** — ek veri yok, ayar yok
+2. **Stop word atmak burada faydalı** (+2,2) — konu sınıflandırmasında; duygu analizinde ya da olumsuzluk tespitinde zarar verirdi
+3. **İkili n-gram'lar durumu kötüleştirdi**, öznitelik sayısını 7,7 katına çıkararak: daha çok öznitelik, daha çok varyans
+4. **`sublinear_tf` aynı yönü işaret ediyor** (0,843'e karşı 0,831): $1 + \log(\text{tf})$ — azalan getirinin terim frekansı tarafı
+
+::: {.takeaway}
+Aralıksız nokta kestirimleri: 1.550 belgede 0,83 civarında kabaca ±1,9 puan — ders 3 ile 4 ise 1,2 puanlık bir farka dayanıyor. [Ders 1–2'yi bulgu, 3–4'ü yön olarak okuyun.]{.hl}
+:::
+
+::: {.notes}
+Ağırlıklandırma süs değil. Stop word konusunda evrensel bir cevap yok.
+
+scikit-learn'ün kendi belgelendirmesi `stop_words='english'`i sorunlu ilan
+ediyor: genel amaçlı bir liste değil, seçim ölçütleri belgelenmemiş ve birkaç
+girdisi varsayılan `token_pattern` tarafından hiç üretilemiyor. Stop word'ler
+sonucunuz için önemliyse listeyi kendiniz yazın ve ekrana basın.
+
+Uyarı üzerine — bu kitap aynısını herkesten istiyor. Altı model birebir aynı test
+belgelerini görüyor. Dolayısıyla doğru alet McNemar (McNemar 1947) gibi
+*eşleştirilmiş* bir test; iki bağımsız aralığı karşılaştırmaktan çok daha güçlü.
+Bölüm böyle bir test çalıştırmadı. Deney sizinken eşleştirilmiş testi çalıştırıp
+raporlayın.
+
+Altı satırdan genelleme yapmaya dair bir uyarı daha. Her sayı uzun belgeler
+üzerinde İngilizce konu sınıflandırmasından geliyor; dört dersin ikisi görev
+değişince tersine dönüyor. Türkçe ürün yorumlarında — kısa belgeler, konu değil
+duygu — 4. bölüm her iki konuda da tersini ölçüyor: ikili n-gram'lar o bölümdeki
+en büyük tek kazancı veriyor ve düz sayım TF-IDF'i yeniyor. Çünkü IDF tam da
+sinyali taşıyan sık duygu kelimelerini aşağı ağırlıklandırıyor. Aktarılabilir
+olan ders sıralama değil, yöntem.
+:::
+
+## Okunabilir ve minik
+
+```text
+rec.autos            car, cars, engine, ford, oil, dealer, drive, price
+sci.med              msg, doctor, disease, medical, pain, patients, treatment
+sci.space            space, nasa, orbit, moon, launch, earth, spacecraft
+talk.politics.guns   gun, guns, weapons, fbi, law, government, firearms
+```
+
+:::: {.columns}
+
+::: {.column width="38%"}
+::: {.stat}
+[213×]{.bignum}
+
+daha küçük, seyrek matris olarak: 601,6 MB yerine 2,8 MB
+:::
+:::
+
+::: {.column width="62%"}
+- Modele ne öğrendiğini sorun; size kelimelerle söylesin. [Hiçbir Transformer size bu tabloyu vermez]{.hl}
+- 2.327 × 32.318, yoğunluk %0,312 — %99,7'si sıfır
+- Eğitim bir dizüstünde saniyeler sürer; çıkarım seyrek bir iç çarpımdır; hikâyenin hiçbir yerinde GPU yok
+:::
+
+::::
+
+::: {.notes}
+Önemsemek için ikinci sebep, modelin *okunabilir* olması. Tablo, TF-IDF artı
+lojistik regresyon modelinin her sınıf için öğrendiği en güçlü öznitelikler. Bir
+modeli güvenlik kuruluna, düzenleyiciye ya da şüpheci bir tesis müdürüne
+savunmanız gerektiğinde bu, dört puan doğruluktan daha çok işe yarar.
+
+Matris 234.281 sıfırdan farklı değer saklıyor. Yoğun float64 601,6 MB isterdi;
+seyrek CSR 2,8 MB'ta kalıyor.
+
+Bölümün "Bag-of-words, dürüstçe" tablosu tek nefeste. Neden ayakta kaldı: hızlı ve
+minik; okunabilir; güçlü bir baseline (burada 0,853; 3. bölümde ortalanmış
+embedding'leri yendi, sonra 4. bölümde Türkçe veride tekrar yendi); kendi
+verinizin ötesinde eğitim verisi gerekmez — ön eğitimli hiçbir şey, indirilen
+hiçbir şey, tedarikçi yok; deterministik ve hata ayıklanabilir. Neden yeterli
+değil: kelime sırası yok, eş anlamlılık yok (`car` ile `automobile`, `car` ile
+`banana` kadar ilgisiz), çok anlamlılık yok (`bank` için tek sütun), sözlük asla
+kapanmaz ve olumsuzlamanın kapsamı yok.
+
+Doğru okuma "eski teknoloji, hâlâ şaşırtıcı derecede iyi" değil. İki sütun *farklı
+görevleri* anlatıyor. Önemli kelimeler metinde harfi harfine geçiyorsa ve hız ile
+denetim izi gerekiyorsa, bu doğru cevap. Anlam sıraya, bağlama ya da öngörmediğiniz
+bir kelimeye bağlıysa, ne kadar ayar yaparsanız yapın kurtulamazsınız.
+:::
+
+## Bunlar gerçekte nerede çalışıyor
+
+- **Uber'de talep yönlendirme** — COTA bu bölümün hattını neredeyse satır satır çalıştırıyor: TF-IDF, LSA, sonra kosinüs sıralaması. Talep çözüm süresi yaklaşık %10 kısaldı
+- **Google'ın metin sınıflandırma rehberi** — karşılaştırdığı kodlamalar arasında en doğrusu TF-IDF n-gram'ları; doğruluk 20.000 öznitelik civarında tepe yapıyor
+- **RAG için melez erişim** (hybrid retrieval) — seyrek BM25, embedding'lerin karıştırdığı birebir eşleşmeleri yakalar: parça numaraları, hata kodları, soyadları (20. bölüm)
+- **İstenmeyen içerik filtreleme** — her mesajda çalışacak kadar ucuz, dakikalar içinde yeniden eğitilir; feature hashing sözlüğü hiç kurmadan çalışır
+- **Yakın kopya tespiti** — Google'ın web tarama tekilleştirmesi milyarlarca belge üzerinde shingle'lar ve hash'leme ile çalışır
+
+::: {.src}
+Uber Engineering 2018 · Google Developers 2022 · Weinberger vd. 2009 · Manku vd. 2007
+:::
+
+::: {.notes}
+Hiçbiri tarihî merak konusu değil ve her biri onu kuran şirket tarafından
+belgelenmiş.
+
+Uber'in COTA'sı: temizle, tokenize et, stop word'leri at, kök bul, TF-IDF, LSA ile
+boyut indir, sonra aday çözümleri talebe kosinüs benzerliğine göre sırala. Yazıda
+ayrıca kosinüs benzerliğine dayalı sıralayıcının, konu vektörlerini doğrudan
+kullanmaya kıyasla bağıl doğrulukta %25 üstünlük sağladığı belirtiliyor; çünkü ham
+vektörler fazla seyrekti. Bu bölümün seyreklik problemi, üretimde ve üzerinde bir
+sayıyla.
+
+Google'ın rehberi: ~20.000 özniteliğin ötesinde ek öznitelikler hiçbir katkı
+vermiyor ve sonunda aşırı öğrenmeye yol açıyor. Bizim ikili n-gram sonucumuz —
+249.522 öznitelik, daha kötü doğruluk — aynı bulgunun küçük bir derlemdeki hâli.
+
+Filtreleme satırının tamamı: istenmeyen içerik ve kötüye kullanım filtreleme.
+Feature hashing, öznitelikleri bir hash fonksiyonuyla sabit sayıda sütuna eşler.
+
+Shingle, belge boyunca kaydırılan sabit uzunlukta bir kelime (ya da karakter)
+penceresi; pencereler kiremit gibi birbirinin üstüne biner. *Pompa dün gece
+arızalandı* cümlesinin üçlü kelime shingle'ları `pompa dün gece` ve
+`dün gece arızalandı`. Yani shingle'lar n-gram'ların ta kendisi, bu bölümün ön
+yarısı.
+
+Arama sıralaması bir sonraki slaytta.
+:::
+
+## BM25 — ve iki düğmesi neden zaten tanıdık
+
+$$\mathrm{BM25}(q, d) = \sum_{t \in q} \mathrm{idf}(t) \cdot \frac{c(t,d)\,(k_1 + 1)}{c(t,d) + k_1\!\left(1 - b + b\,\frac{|d|}{\mathrm{avgdl}}\right)}$$
+
+- Lucene — dolayısıyla Elasticsearch ve OpenSearch — belgeleri BM25 ile puanlar; BM25, TF-IDF'in doğrudan torunu
+- **$k_1$**: terim frekansı $k_1 + 1$'e doğru *doyuma ulaşır*; onuncu geçiş neredeyse hiçbir şey eklemez — ayarlanabilir tavanı olan `sublinear_tf`
+- **$b \in [0,1]$**: uzunluğu yok saymaktan ($b = 0$) ortalamaya göre uzunluğa bölmeye ($b = 1$) — L2'nin ele aldığı aynı dert, anahtar yerine kadranla
+- Lucene'in varsayılanları: $k_1 = 1{,}2$, $b = 0{,}75$
+
+::: {.takeaway}
+[Her zaman önce TF-IDF baseline'ını kurun.]{.hl} Transformer'ınız onu geçemiyorsa, veriniz hakkında önemli bir şey öğrendiniz demektir — üstelik ucuza.
+:::
+
+::: {.src}
+Robertson ve Zaragoza 2009
+:::
+
+::: {.notes}
+Formülü az önce kurduğumuz şeye karşı okuyun. idf çarpanı bizimkiyle aynı fikir;
+BM25 olasılıksal bir varyant kullanıyor. Kesir, ham terim frekansının yerine
+doyuma giden bir frekans koyuyor. b ise L2 normalleştirmesinin ele aldığı aynı
+derdi — uzun belgeler sırf uzunluklarıyla kazanmasın — başka bir formülle çözüyor.
+İkisi aynı işlem değil.
+
+Hayatınızda bir kez site içi arama kutusu kullandıysanız, bunu kullandınız.
+Elastic'in "Practical BM25" yazı dizisi formülü ve iki ayar sabitini çoğu ders
+kitabından iyi anlatıyor.
+
+Bölümün pratik kuralı: etiketiniz azsa, belgeleriniz uzunsa, sözlüğünüz teknik ve
+birebir eşleşme önemliyse ya da bu öğleden sonraya bir baseline gerekiyorsa
+TF-IDF'e uzanın.
+:::
+
+## Sezgi kontrolü 1 / 6 {.question}
+
+::: {.ask}
+TF-IDF matrisinizin 200.000 sütunu ve 5.000 satırı var. Endişelenmeli misiniz?
+:::
+
+::: {.fragment}
+- Bellek için değil: depolama satır × sütunla değil, *sıfırdan farklı* eleman sayısıyla ölçeklenir
+- Asıl endişe istatistiksel — 5.000 gözlemden 200.000 parametre: [bir p ≫ n problemi]{.hl}
+- Alışıldık cevaplar: güçlü düzenlileştirme (L2 ya da L1) ve `min_df` ile öznitelik kırpmak
+- Dört kategorili derlemde `min_df=5`, 32.318 sütunu 6.281'e indiriyor — %81'i gidiyor
+- Bedava değil: silinen sütunlar hâlâ token geçişlerinin %11,6'sını taşıyor
+:::
+
+::: {.notes}
+Bölümün sezgi kontrolleri: öğrenciler cevabı açmadan önce kendileri cevaplasın.
+Altısını da cevaplayabiliyorlarsa, bölümü koddan anlaşılandan daha iyi anlamışlar
+demektir.
+
+`min_df` neden bu kadar etkili? Zipf kısmı cevaplamıştı: sözlüğün büyük bölümü
+herhangi bir kestirimi destekleyemeyecek kadar seyrek geçiyor.
+
+Ama attığınız şey yalnızca bir kez geçen kelimeler (hapax legomena) değil; okurun
+gerçekten karşılaştığı kelimeler de gidiyor. Takasın değip değmediği bir kural
+değil, ölçülecek bir soru. 4. alıştırma bunu ölçtürüyor.
+:::
+
+## Sezgi kontrolü 2 / 6 {.question}
+
+::: {.ask}
+IDF eğitim kümesinde mi, yoksa bütün veride mi hesaplanmalı?
+:::
+
+::: {.fragment}
+- **Yalnızca eğitim kümesinde**; sonra değiştirilmeden test verisine uygulanır
+- IDF veriden kestirilen bir parametredir: eğitim + test üzerinde hesaplamak test dağılımını özniteliklerinize sızdırır
+- `scikit-learn`'de eğitimde `fit_transform`, testte `transform` — `fit_transform`'u iki kez çağırmak gerçek ve yaygın bir hata
+- Üretimde IDF vektörü her partide yeniden hesaplanmaz; [sürümleyip yayına aldığınız bir model artefaktıdır]{.hl}
+:::
+
+::: {.notes}
+Aksi hâlde trafik değiştikçe öznitelikleriniz sessizce kayar.
+
+Bu cevap dersin sonundaki ilk mülakat sorusunda geri dönüyor.
+:::
+
+## Sezgi kontrolü 3 / 6 {.question}
+
+::: {.ask}
+Bir kelime her belgede geçiyor. TF-IDF ağırlığı nedir?
+:::
+
+::: {.fragment}
+- `scikit-learn`'ün düzleştirilmiş formülü: $\mathrm{df} = n$ olunca $\ln\frac{1+n}{1+n} + 1 = 1$ — kelime 1 ağırlığıyla hayatta kalır, sonra L2 onu daha nadir terimlere göre küçültür
+- Ders kitabının düzleştirilmemiş $\log(n/\mathrm{df})$ formülünde tam olarak **0** — terim silinir
+- `smooth_idf=True` varsayılandır
+- [İki geleneğin farklı olduğunu bilmek, aracı kullanmış biriyle hakkında okumuş biri arasındaki farktır]{.hl}
+:::
+
+::: {.notes}
+4. adıma bağlayın: dört belgelik derlemimizde `yine` tam olarak 1,0 tabanına
+oturmuştu.
+:::
+
+## Sezgi kontrolü 4 / 6 {.question}
+
+::: {.ask}
+Belge vektörlerini neden normalleştiriyoruz da öznitelik sütunlarını normalleştirmiyoruz?
+:::
+
+::: {.fragment}
+- İki normalleştirme farklı sorulara cevap verir. Satır bazında L2 belge *uzunluğunu* çıkarır; karşılaştırma büyüklüğü değil konuyu ölçer
+- Sütun standartlaştırması — her kelimenin ortalamasını çıkarmak — felaket olurdu: seyrekliği yok eder
+- %99,7'si sıfır olan bir sütundan sıfırdan farklı bir ortalama çıkarın: her sıfır sıfırdan farklı olur, 2,8 MB 601,6 MB'a çıkar
+- [Seyreklik bir uygulama ayrıntısı değil; hangi işlemleri yapmanıza izin verildiğini belirleyen bir kısıttır]{.hl}
+:::
+
+::: {.notes}
+Sayılar "Okunabilir ve minik" slaytındaki sayılar: sınıflandırma deneyindeki
+2.327 × 32.318 matris.
+:::
+
+## Sezgi kontrolü 5 / 6 {.question}
+
+::: {.ask}
+Arama motorunuz “P-101” parça numarası için hiçbir şey döndürmüyor. Neden?
+:::
+
+::: {.fragment}
+```text
+default    : ['101', '102', 'devre', 'dışı', 'pompası']
+custom     : ['devre', 'dışı', 'p-101', 'p-102', 'pompası']
+```
+
+- Neredeyse kesinlikle tokenizer: varsayılan `token_pattern=r"(?u)\b\w\w+\b"` en az iki kelime karakteri ister ve tireyi aşmaz
+- `P-101` sessizce `101`'e döndü — bir sayfa numarasındaki, bir miktardaki ya da bir basınç değerindeki 101 ile aynı token
+- Görünmez: hiçbir yerde hata alınmaz, doğruluk sessizce düşük durur. [`get_feature_names_out()` çıktısını yazdırın ve gerçekten okuyun]{.hl}
+:::
+
+::: {.notes}
+`P-102` de çıplak bir sayıya dönüştü. İkisi hâlâ ayrı token'lar, ama ekipman öneki
+kayboldu.
+
+Teknik alanlarda bu hata sınıfı, herhangi bir model seçiminden daha çok zarar
+verir. Önleyen alışkanlık: herhangi bir vectorizer'ı (vektörleştirici; metni sayı
+matrisine çeviren `CountVectorizer`, `TfidfVectorizer` gibi nesneler) eğittikten
+sonra öznitelik adlarını yazdırın ve okuyun. Gerçekten okuyun. 2. alıştırma tam
+olarak bunu çalıştırıyor.
+:::
+
+## Sezgi kontrolü 6 / 6 {.question}
+
+::: {.ask}
+2026'da bag-of-words ne zaman *doğru* seçimdir?
+:::
+
+::: {.fragment}
+Şunlardan en az ikisi geçerliyse:
+
+- sınıf başına çok az etiketli örnek var
+- sözlük alana özgü ve birebir eşleşme önemli — parça numaraları, gen adları, hukuki atıflar
+- her tahmini, üzerinizde yetkisi olan birine açıklamak zorundasınız
+- GPU yok ya da katı bir gecikme bütçesi var
+- belgeler kısa ve incelikli değil, uzun ve konusal
+:::
+
+::: {.fragment}
+Ve koşulsuz olarak: [baseline olarak.]{.hl} "Transformer'ımız 0,91 alıyor" deyip TF-IDF'in 0,89 aldığını söylemeyen bir ekip hiçbir şey ölçmemiştir.
+:::
+
+::: {.notes}
+İki tık: önce koşullar, sonra koşulsuz cevap.
+
+Son cümle 22. bölüme (LLM Sistemlerini Değerlendirmek) işaret ediyor.
+:::
+
+## Mülakat sorusu 1 / 2 {.question}
+
+::: {.ask}
+Metin sınıflandırıcınız çevrimdışı iyi, üretimde kötü çalışıyor. Hata ayıklama sürecinizi anlatın.
+:::
+
+::: {.fragment .compact}
+Maliyet sırasına dizilmiş bir kontrol listesi:
+
+1. **Training/serving skew** (eğitim/servis kayması) — *birebir aynı* ön işleme iki yerde de çalışıyor mu? Sözlüğü ve IDF vektörüyle eğitilmiş `TfidfVectorizer` dâhil
+2. **Sözlük kayması** — yeni ürün adları ve hata kodları hiçbir sütuna düşmez
+3. **Etiket dağılımında kayma**
+4. **Çevrimdışı değerlendirmede sızıntı** — örneğin vectorizer'ı eğitim/test ayrımından *önce* eğitmek
+5. Ve ancak bundan sonra model
+:::
+
+::: {.fragment}
+::: {.takeaway}
+[Eğitilmiş vectorizer bir çıktıdır: model ağırlıklarıyla birlikte kaydedin, sürümleyin ve yayına alın.]{.hl}
+:::
+:::
+
+::: {.notes}
+Metin temsili, uygulamalı NLP mülakatlarında en güvenilir biçimde yoklanan konu;
+adayın zihinsel modelleri mi olduğu yoksa kütüphane çağrılarını mı ezberlediği tam
+burada anlaşılır. Bölümde on dört soru var; bu ikisi "bir şey sahiden yayına almış
+olup olmadığınızı sınayanlar" grubundan.
+
+Kaynak gösterimi üzerine, bölümden: "Google ve Amazon mülakatlarında sorulan NLP
+soruları" başlıklı sayfaların neredeyse tamamı, arkasında kanıt olmayan arama
+motoru içeriği. Bölümün soruları iki güvenilir ücretsiz kaynaktan geliyor: Chip
+Huyen'in *Introduction to Machine Learning Interviews* kitabı ve *Machine Learning
+Interviews* deposu. İkisi de tek tek soruları adı geçen bir şirkete bağlamıyor.
+
+"Serving", modelin eğitimi bittikten sonra gerçek isteklere cevap verdiği aşama.
+`fit` edildikten sonra vectorizer artık yalnızca kod değil; eğitim verisinden
+öğrenilmiş iki şey taşıyor. Üretimde aynısı yüklenmiyor da yeniden eğitiliyorsa,
+aynı cümle iki tarafta iki farklı vektöre dönüşür ve model suçsuzdur.
+
+Eğitilmiş vectorizer'ın model ağırlıkları gibi kaydedilmesi, sürümlenmesi ve
+onlarla birlikte yayına alınması gereken bir çıktı olduğunu söylemek, uygulayıcıyı
+öğrenciden en çok ayıran tek cevap.
+:::
+
+## Mülakat sorusu 2 / 2 {.question}
+
+::: {.ask}
+100 milyonluk bir derlemde yakın kopya belgeleri tespit eden bir sistem tasarlayın.
+:::
+
+::: {.fragment .compact}
+$\binom{10^8}{2} \approx 5 \times 10^{15}$ çift — saniyede bir milyar karşılaştırmayla 58 gün. [Çiftleri hiç saymayın.]{.hl}
+
+1. **Shingling** — her belge 5–9 kelimelik pencerelerden oluşan bir kümeye dönüşür; kopya tespitinde sıra önemlidir
+2. **Jaccard** $|A \cap B| / |A \cup B|$ — "yakın kopya"yı tanımlar
+3. **MinHash** — 128 sayılık bir imza; iki imzanın bir konumda aynı çıkma olasılığı Jaccard benzerliğine eşit
+4. **LSH** — $r = 8$ satırlık $b = 16$ bant: eşik $\approx 0{,}71$; Jaccard 0,8 olan çift %94,7 olasılıkla aday olur, 0,3 olan yalnızca %0,1
+5. **Doğrulama** — gerçek Jaccard yalnızca aday çiftlerde
+:::
+
+::: {.src}
+Broder 1997 · Indyk ve Motwani 1998
+:::
+
+::: {.notes}
+Sınadıkları şey tek bir refleks: her belge çiftine tek tek bakmaya kalkmamak. Cevap
+"hızlandırırız" değil, "çiftleri hiç saymayız" olmalı. Her adım bir öncekinin
+bıraktığı sorunu çözer.
+
+1. Neden bag-of-words değil de shingle: aynı kelimeleri farklı sırayla kullanan iki
+   belge kopya değildir, ama bag-of-words'te aynı vektöre düşerler.
+2. Doğru ölçü Jaccard; sorun onu hesaplamak. Kümeler büyük ve çift sayısı hâlâ
+   5 × 10¹⁵.
+3. MinHash: koca kümeleri kesiştirmek yerine 128 sayı karşılaştırılır; belge başına
+   depolama birkaç yüz bayta iner. Çift sayısı hâlâ 5 × 10¹⁵.
+4. LSH (locality-sensitive hashing): imza b banda bölünür, her bant r satır
+   (b × r = 128). Her bant ayrı bir kovaya atılır; iki belge ancak en az bir bantta
+   aynı kovaya düşerse aday sayılır. Sorun karesel olmaktan çıkıp neredeyse doğrusal
+   hâle gelir.
+5. Aday çiftler milyarlarca değil, yönetilebilir sayıda.
+
+Bu bölümün malzemesi hattın *ilk* adımı ve önemi göründüğünden büyük. Büyük/küçük
+harfi birleştirdiniz mi, noktalamayı attınız mı, kelime yerine karakter penceresi
+mi kullandınız — her biri neyin "kopya" sayılacağını değiştirir.
+:::
+
+## Alıştırmalar (1 / 2)
+
+::: {.compact}
+1. **Tokenizer ekonomisi.** Kendi teknik yazınızdan bir paragraf Türkçe metni ve İngilizce çevirisini alın. Tokenizer Playground ya da `tiktoken` ile iki farklı tokenizer'da token sayın, maliyet oranını hesaplayın ve bu oranın ayda 100.000 istekte yıllık API faturanıza ne yaptığını kestirin.
+2. **Vectorizer'ı kırın.** Kendi alanınızdan on belge üzerinde bir `CountVectorizer` eğitin ve `get_feature_names_out()` çıktısını yazdırın. En az iki yanlış token bulun — bozulmuş bir tanımlayıcı, birleşmiş bir çift, kaybolmuş bir birim — `token_pattern` ile düzeltin ve neyin değiştiğini raporlayın.
+3. **Elle türetin.** d3'ün TF-IDF vektörünü kâğıt kalemle hesaplayın, sonra `TfidfVectorizer` ile doğrulayın. Uyuşmazlarsa sorun düzleştirmede mi, L2 normalleştirmesinde mi, yoksa `token_pattern`'da mı?
+4. **Tekrarlayın ve genişletin.** Sınıflandırma tablosunu yeniden üretin, sonra `min_df=5` ile TF-IDF satırını ekleyin. Doğruluk düşüyor mu? Öznitelik sayısı ne kadar düştü? İki yapılandırmadan birini, onu sürdürecek meslektaşınıza savunun.
+:::
+
+::: {.notes}
+Bölümün sekiz alıştırması, iki slayta bölündü.
+
+3. alıştırma: elle hesap ile kütüphane uyuşmazsa, uyuşmazlık neredeyse her zaman
+bu üç yerden birinde.
+:::
+
+## Alıştırmalar (2 / 2)
+
+::: {.compact}
+5. **Olumsuzlama hatasını bulun.** Kendi alanınızdan, operasyonel anlamı taban tabana zıt ve TF-IDF kosinüsü 0,9'un üzerinde iki belge kurgulayın. Sonra bu modelin o karar için neden kullanılmaması gerektiğini açıklayan tasarım incelemesi cümlesini yazın.
+6. **Kendi verinizde Zipf.** Kendi derleminizde sıraya karşı frekansı log-log ölçekte çizin. Çizgi düz görünüyor mu? İlk beş token ne — içlerinde `'ax` gibi bir artefakt var mı?
+7. **Türkçe morfoloji faturası.** Bir teknik terim seçin (`basınç`, `sıcaklık`, `dayanım`) ve ondan türetilmiş beş çekimli biçimi `tiktoken` ile sayın. Kelime başına token sayısı nasıl büyüyor? Aynı biçimleri ASCII'ye indirgeyip yeniden sayın.
+8. **Mülakat alıştırması.** Chip Huyen'in kitabındaki §8.2.1 beş belgelik TF-IDF sıralama problemini kâğıt kalemle çözün: bir belge sorgu terimini bir yerine üç kez geçirirse sırası ne olur, bu arzu edilir mi? `TfidfVectorizer` ile kontrol edin.
+:::
+
+::: {.notes}
+7. alıştırma `evlerimizden` örneğini öğrencinin kendi terminolojisinde tekrarlıyor;
+ASCII'ye indirgenmiş sayım, doğru Türkçe yazmanın faturasını ölçüyor.
+
+8. alıştırmanın devam sorusu aslında terim frekansı doygunluğuyla ilgili: BM25'in
+eklediği ve `sublinear_tf`'in yaklaştırdığı şey tam olarak bu. Bağlantı:
+https://huyenchip.com/ml-interviews-book/contents/8.2.1-natural-language-processing.html
+:::
+
+## Daha derine inmek için
+
+| Kaynak | Yazar | Neden |
+|:--|:--|:--|
+| [minbpe](https://github.com/karpathy/minbpe) · [iki saatlik video](https://www.youtube.com/watch?v=zduSFxRajkE) | Andrej Karpathy | GPT sınıfı bir tokenizer'ı sıfırdan kurar; tek bir şey yapacaksanız bunu yapın |
+| [Speech and Language Processing](https://web.stanford.edu/~jurafsky/slp3/) | Jurafsky & Martin | 2. bölüm *Words and Tokens*, 5. bölüm *Embeddings* |
+| [Introduction to Information Retrieval](https://nlp.stanford.edu/IR-book/html/htmledition/irbook.html) | Manning, Raghavan & Schütze | Vektör uzayı modeli; IDF sayfası "logaritma neden"in titiz hâli |
+| [Hugging Face LLM Course, 6. bölüm](https://huggingface.co/learn/llm-course/chapter6/1) | Hugging Face | BPE, WordPiece ve Unigram tokenizer'larını sıfırdan kurar |
+| [The Tokenizer Playground](https://huggingface.co/spaces/Xenova/the-tokenizer-playground) | — | Kendi adınızı, parça numaralarınızı ve bir paragraf Türkçe deneyin |
+| [scikit-learn: metinden öznitelik çıkarma](https://scikit-learn.org/stable/modules/feature_extraction.html#text-feature-extraction) | scikit-learn | Bu derste kullanılan düzleştirilmiş TF-IDF'in birebir tanımı |
+| [Introduction to ML Interviews](https://huyenchip.com/ml-interviews-book/) | Chip Huyen | Ücretsiz; bu mülakatların gerçekte ne içerdiğine dair en dürüst rehber |
+
+::: {.notes}
+Bölümdeki listeden bir seçki; daha fazlasını isteyenler için gerisi:
+
+- minbpe: GPT sınıfı bir tokenizer'ı sıfırdan kuran birkaç yüz satır temiz Python.
+- Jurafsky & Martin: bölümler Ocak 2026 taslağında yeniden numaralandı; "vektör
+  anlambilimi için 6. bölüm" diyen eski blog yazıları artık güncel değil.
+- Manning, Raghavan & Schütze: gövdeleme ve sözlük biçimine indirgeme ile BM25
+  sayfalarına da bakın. Tamamı ücretsiz.
+- Silge & Robinson, *Text Mining with R*: matrislerle değil veri çerçeveleriyle
+  düşünen istatistikçiler için TF-IDF bölümü daha hızlı oturabilir.
+- Hugging Face kursu: BPE dersi bizim oyuncak uygulamamızın doğrudan devamı.
+- tiktoken: bölümdeki maliyet ölçümlerinde kullanılan kütüphane.
+- sentencepiece: kendi tokenizer'ınızı eğitmeniz gerektiğinde — örneğin Türkçe
+  ağırlıklı bir derlem için — fiilî standart araç.
+- scikit-learn belgeleri: bir kez düzgün okuyun, "sayılarım neden kitapla
+  tutmuyor" sorularının çoğu kalkar. 20 Newsgroups sınıflandırma örneği bizim
+  deneyimizin genişletilmiş hâli.
+- Stanford CS276 (Information Retrieval and Web Search): bu bölümün kapsamına en
+  yakın açık ders; CS224N, 3. bölümün başladığı yerden devam eder.
+- Elena Voita, NLP Course For You: seyrek sayımlardan yoğun vektörlere geçişin en
+  anlaşılır görsel anlatımı.
+:::
