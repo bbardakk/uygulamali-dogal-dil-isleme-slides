@@ -87,7 +87,7 @@ Sınıfa, sağdaki dokümanlardan hangilerini kendi alanlarının ürettiğini s
 - Eksik olan göreve özel mühendislikti: etiketli bir derlem, öznitelikler, tek bir iş için kurulmuş bir iş akışı. [Bu kadar düşen şey o maliyet.]{.hl}
 
 ::: {.takeaway}
-*"Bir makine bu 40.000 dokümanı okusun ve hangilerinde salmastra arızasından bahsedildiğini söylesin"* cümlesi bir araştırma projesi olmaktan çıkıp bir öğleden sonralık işe dönüştü. Kusursuz biçimde değil; denetim gerektirmeden hiç değil.
+*"Bir makine bu 40.000 dokümanı okusun ve hangilerinde salmastra arızasından bahsedildiğini söylesin"* cümlesi bir araştırma projesi olmaktan çıkıp birkaç saat içinde prototiplenebilecek bir işe dönüştü. Kusursuz biçimde değil; denetim gerektirmeden hiç değil.
 :::
 
 ::: {.notes}
@@ -171,8 +171,11 @@ anlatın.
 1954, Georgetown–IBM (Hutchins 2004): altmışı biraz aşkın Rusça cümle otomatik
 olarak çevrildi; 250 kelimelik bir sözlük ve altı dilbilgisi kuralıyla.
 1966, ELIZA (Weizenbaum 1966): birkaç düzine örüntü kuralı insanlara
-anlaşıldıklarını hissettirdi. Aynı yıl ALPAC raporu makine çevirisini başarısız
-ilan etti ve fon çöktü.
+anlaşıldıklarını hissettirdi. Aynı yıl ALPAC raporu, dönemin makine çevirisi
+sistemlerinin maliyet ve kalite açısından insan çevirisine karşı yeterli pratik
+fayda sağlamadığını savundu; rapordan sonra ABD'deki makine çevirisi fonlarında
+ciddi bir azalma yaşandı. "ALPAC başarısız dedi ve fişi çekti" özeti popüler ama
+fazla basitleştirilmiş bir anlatım.
 1972, SHRDLU (Winograd 1972): renkli bloklardan oluşan bir oyuncak dünyanın
 içinde gerçekten etkileyici bir dil anlama. Yaklaşımın hiçbir yanı o dünyanın
 ötesine ölçeklenmedi.
@@ -233,7 +236,7 @@ olmasının nedeni de bu.
 ## Genel problemde, herkesin gözü önünde başarısızlık
 
 - **1954 · Georgetown–IBM** — altmışı biraz aşkın cümle, 250 kelimelik sözlük, altı dilbilgisi kuralı; projenin yöneticisi genel çevirinin üç ilâ beş yıl içinde geleceğini öngördü
-- **1966 · ALPAC** — makine çevirisi başarısız ilan edildi; fon çöktü
+- **1966 · ALPAC** — çeviri sistemleri maliyet/kaliteyi karşılamıyor denildi; fonlar azaldı
 - **1972 · SHRDLU** — gerçekten etkileyici dil anlama, ama renkli bloklardan oluşan bir oyuncak dünyada; hiçbir yanı onun ötesine ölçeklenmedi
 - **2020 · Ölçekleme yasaları** — ilk yayımlanan sürüm iki yıl sonra revize edildi
 
@@ -400,7 +403,7 @@ yendiği bir derlemi ölçüyor.
 
 - Etiketsiz metinle bir kez ön eğitim (bedelini başkası ödedi)
 - Birkaç yüz örnekle — ya da hiç örneksiz — uyarlayın
-- Aynı model sınıflandırmaya, çıkarıma ve üretime hizmet eder
+- Aynı *paradigma* sınıflandırmaya, çıkarıma ve üretime hizmet eder
 - Gelecek çeyrek yeni görev → yeni bir prompt
 :::
 
@@ -434,6 +437,34 @@ ilk eğitim koşusu; genellikle bir kez ve başkası tarafından yapılır. *Pro
 (istem), modele gönderdiğiniz metin; yönergeler ve örnekler dâhil.
 :::
 
+## Tek model değil, üç model ailesi
+
+| Aile | Temsilci | Ne yapar | Nerede güçlü |
+|:--|:--|:--|:--|
+| **Yalnızca encoder** | BERT (2019) | metnin tamamını okur, token başına temsil üretir | sınıflandırma, çıkarım, token etiketleme |
+| **Yalnızca decoder** | GPT (2020) | soldan sağa sonraki token'ı tahmin eder | üretim, prompt'la yönlendirme, sohbet |
+| **Encoder-decoder** | T5 (2020) | girdi dizisini okur, çıktı dizisi yazar | çeviri, özetleme, girdi→çıktı dönüşümleri |
+
+::: {.takeaway}
+"Aynı model her işi yapıyor" değil — [aynı ön eğitim paradigması giderek daha
+genel model ailelerini mümkün kıldı.]{.hl}
+:::
+
+::: {.notes}
+Bir önceki slayttan çıkabilecek yanlış anlamayı burada kesiyoruz. Paylaşılan
+şey tek bir model değil, ön eğitim fikri. Üzerine kurulan üç mimari ailesi var
+ve farklı işlerde güçlüler.
+
+Ayrıntı şimdilik önemli değil; öğrencinin aklında kalması gereken, bu üçünün
+var olduğu ve seçimin göreve bağlı olduğu. 7. bölüm üçünün de altındaki
+mimariyi anlatıyor; aynı bölümün sonundaki kısım hangisini ne zaman
+seçeceğinizi.
+
+Sınıfta sorulası soru: "Bakım kayıtlarını arıza tipine göre etiketleyeceksiniz.
+Hangi aile?" Cevap encoder-only tarafına meyleder ve nedenini söyletmek,
+slaytın tamamını öğretir.
+:::
+
 ## 3. kırılma · “Model eğit”ten “yönerge yaz”a
 
 - Ön eğitimli bir model bir metin tamamlama motorudur: güçlü ama kullanımı zahmetli
@@ -463,6 +494,33 @@ Dilin bir arayüz hâline gelmesi tam olarak bu anlamda. Hangi bakım kayıtlar�
 giren bir mühendis çeviri katmanı olmadan. Bunun iyi bir şey olup olmadığı
 tamamen cevapların doğru olup olmadığına bağlı. 22. bölüm (LLM Sistemlerini
 Değerlendirmek) tam da bu yüzden var.
+:::
+
+## ChatGPT bir model değil, üç katman
+
+| Katman | Ne olduğu | Bölüm |
+|:--|:--|:--|
+| **Temel model** (base model) | etiketsiz metinle ön eğitilmiş, metin devam ettiren ham model | 8 |
+| **Yönerge izleyen model** | talimat ayarı + insan tercihleriyle eğitim sonrası | 9 |
+| **Uygulama** | sistem prompt'u, erişim (RAG), araçlar, korkuluklar, arayüz | IV–V. kısımlar |
+
+::: {.takeaway}
+[Bir davranışı tartışırken hangi katmandan söz ettiğinizi bilin]{.hl} — düzeltme
+de o katmanda yapılır.
+:::
+
+::: {.notes}
+Öğrencilerin çoğu ChatGPT gibi bir sistemi doğrudan "LLM" sanıyor. Ekranda
+gördükleri şey üç katmanın üst üste binmiş hâli ve bu ayrım kitap boyunca işe
+yarayacak.
+
+Pratik faydası şu: "Model şunu uydurdu" dendiğinde sorulacak ilk soru hangi
+katmanın sorumlu olduğu. Bilgi eksikse uygulama katmanı (erişim) eksik olabilir;
+üslup ya da reddetme davranışı sorunluysa eğitim sonrası katmanı; dilin kendisi
+sorunluysa temel model.
+
+Ödev niteliğinde bir soru: kullandıkları bir asistanda hangi davranışın hangi
+katmandan geldiğini tahmin etsinler, sonra 9. ve 20. bölümlerde kontrol etsinler.
 :::
 
 ## Neden şimdi, tek cümlede
@@ -505,7 +563,7 @@ kaliteyi sunmanın maliyeti Kasım 2022 ile Ekim 2024 arasında milyon token ba�
 ## Sizin alanınız zaten bir NLP problemi
 
 ::: {.lede}
-Altı görev ailesi, insanların gerçekte inşa ettiği neredeyse her şeyi kapsıyor.
+Beş görev ailesi neredeyse her şeyi kapsıyor; değerlendirme beşini de kesen bir katman.
 :::
 
 | Aile               | Dokümanlarınız                             | Ne kazanırsınız                                                                  | Bölüm |
@@ -515,11 +573,13 @@ Altı görev ailesi, insanların gerçekte inşa ettiği neredeyse her şeyi kap
 | **Erişim** (retrieval) | Yönetmelikler, mevzuat, teknik şartnameler | İlgili madde, atfıyla birlikte                                               | 20    |
 | **Üretim**         | Mevzuat bildirimleri ve raporlar           | Yapılandırılmış veriden taslaklanan rutin bölümler; imzayı yine bir insan atar   | 8     |
 | **Ajanlar**        | Kalite şikâyetleri ve üretim verisi        | Sistem veri tabanını sorgular, hesabı yapar, işlemini gösterir                   | 23    |
-| **Değerlendirme**  | Yukarıdakilerin herhangi biri, ölçekte     | Sayısallaştırılmış hata oranı — kalibre edilmesi gereken bir ölçüm aleti olarak model | 22    |
+| **Değerlendirme** *(her ailenin üstünde)* | Yukarıdakilerin herhangi biri, ölçekte | Sayısallaştırılmış hata oranı — kalibre edilmesi gereken bir ölçüm aleti olarak model | 22    |
 
 ::: {.notes}
-Altı görev ailesi: sınıflandırma, erişim (retrieval), çıkarım, üretim, ajanlar ve
-değerlendirme. Kitaptaki etkileşimli gezginde öğrenciler kendi alanlarını
+Beş görev ailesi: sınıflandırma, erişim (retrieval), çıkarım, üretim ve ajanlar.
+Değerlendirme altıncı bir aile değil; beşinin de üstünde duran bir katman —
+hangi aileye girerseniz girin, hata oranını sayıyla ifade edene kadar elinizde
+bir sonuç yok. Tabloda ayrı bir satır olarak duruyor ama sınıfta bunu söyleyin. Kitaptaki etkileşimli gezginde öğrenciler kendi alanlarını
 seçebiliyor. Bu tablo her aile için oradan bir örnek alıyor ve gezginin
 gösterdiği bölümü veriyor (17 Prompting, 20 RAG, 8 LLM manzarası, 23 araçlar ve
 ajanlar, 22 değerlendirme).
@@ -609,11 +669,23 @@ Her birine bir slayt.
 - Makul metin üretir: çoğu zaman doğru, bir kısmında kendinden emin biçimde yanlış
 - [İkisi dışarıdan aynı görünür.]{.hl} Onları ayıran dâhilî bir bayrak yoktur
 - Bir kaynak dikişi muayenesini hangi standardın düzenlediğini sorun: standardı dokümanınızda okumuş da olsa, gördüğü standartların biçiminden bir araya getirmiş de olsa aynı sakin tonla bir tane söyler
+- [Yüksek güvenle yazması, cevabın doğruluğuna dair kalibre edilmiş bir güven ölçüsü değildir]{.hl} — üslup bir olasılık değildir
+- Parametrelerindeki bilgi eğitimde öğrendiği örüntülerle sınırlı: eğitim sonrası gelişmeler ve kurum içi dokümanlar prompt, erişim ya da araç olmadan erişilebilir değil
 - Erişim (retrieval, 20. bölüm) cevapları güvendiğiniz dokümanlara demirleyerek yardımcı olur; problemi ortadan kaldırmaz
 
 ::: {.notes}
 Makul metin çoğu zaman doğrudur ve bir kısmında kendinden emin biçimde
 yanlıştır. Rahatsız edici olan, ikisinin dışarıdan aynı görünmesi.
+
+İki noktayı özellikle vurgulayın. Birincisi: modelin kendinden emin bir üslupla
+yazması, doğruluk hakkında kalibre edilmiş bir güven değil. Öğrenciler bunu
+sezgisel olarak tersine okuyor.
+
+İkincisi: "model yalnızca gördüğü cümleleri ezberliyor" demiyoruz — öğrendiği
+örüntülerden yeni çıkarımlar da üretebiliyor. Sınır, eğitim verisi toplandıktan
+sonra ortaya çıkan bilgiler ve kuruma özel dokümanlar; bunlar prompt'a
+konmadıkça, erişimle getirilmedikçe ya da bir araçla çağrılmadıkça modele
+kendiliğinden erişilebilir değil.
 
 Kaynak dikişi örneğinde model, standardı sizin dokümanınızda okumuş da olsa,
 gördüğü standartların biçiminden bir araya getirmiş de olsa aynı sakin tonla bir
@@ -1043,7 +1115,7 @@ Bölümdeki daha uzun cevaplar:
 
 ## Alıştırmalar
 
-1. Kendi işinizden bir doküman türü seçin. Altı görev ailesinden hangisi ona uyuyor, "başarı" bir sayı olarak ne demek olurdu ve kendinden emin bir yanlış cevaptan kim zarar görür?
+1. Kendi işinizden bir doküman türü seçin. Beş görev ailesinden hangisi ona uyuyor, "başarı" bir sayı olarak ne demek olurdu ve kendinden emin bir yanlış cevaptan kim zarar görür?
 2. Zaman çizelgesini kullanarak, kaldırılması alanın bugünkü durumunu en çok geciktirecek tek kilometre taşını belirleyin. Seçiminizi en bariz iki alternatife karşı savunun.
 3. Bengio vd.'nin (2003) özetini okuyun. Modern bir LLM'den gerçekte ne farklı? Bu farkların hangileri fikir, hangileri yalnızca ölçek?
 4. Son bir ayda yapılmış, yapay zekâ yetkinliği hakkında kamuya açık bir iddia bulun. Altındaki değerlendirmeyi bulun. İddia onunla temas ettikten sonra ayakta kalıyor mu?

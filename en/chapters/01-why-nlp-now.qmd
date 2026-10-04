@@ -87,7 +87,7 @@ Ask the room which of the right-hand documents their own field produces.
 - What they needed was task-specific engineering — a labelled corpus, a feature set, a one-job pipeline. [That cost is what collapsed.]{.hl}
 
 ::: {.takeaway}
-*"Have a machine read all 40,000 of these and tell me which ones mention a seal failure"* moved from a research project to an afternoon's work. Not perfectly, and not without supervision.
+*"Have a machine read all 40,000 of these and tell me which ones mention a seal failure"* moved from a research project to something you can prototype in a few hours. Not perfectly, and not without supervision.
 :::
 
 ::: {.notes}
@@ -170,8 +170,11 @@ students pick an era and read each milestone; walk through them here.
 1954, Georgetown–IBM (Hutchins 2004): just over sixty Russian sentences
 translated automatically, on a 250-word vocabulary and six grammar rules.
 1966, ELIZA (Weizenbaum 1966): a few dozen pattern-matching rules made people
-feel understood; the same year the ALPAC report judged machine translation a
-failure and the funding collapsed.
+feel understood; the same year the ALPAC report argued that the machine
+translation systems of the day did not offer enough practical benefit over
+human translation on cost and quality, and US funding fell sharply afterwards.
+"ALPAC said it failed and pulled the plug" is the popular summary and an
+over-simplified one.
 1972, SHRDLU (Winograd 1972): impressive understanding inside a toy world of
 coloured blocks; nothing scaled beyond it.
 1985, hand-written grammars: coverage grew linearly with effort, and real text
@@ -228,7 +231,7 @@ book's MCP chapter works from — which is why eight chapters are about agents.
 ## Failing publicly at the general problem
 
 - **1954 · Georgetown–IBM** — just over sixty sentences, a 250-word vocabulary, six grammar rules; the project's director predicted general translation within three to five years
-- **1966 · ALPAC** — machine translation judged a failure; the funding collapsed
+- **1966 · ALPAC** — translation systems judged not to pay for themselves; funding fell
 - **1972 · SHRDLU** — genuinely impressive language understanding, inside a toy world of coloured blocks; nothing scaled beyond it
 - **2020 · Scaling laws** — the first published version was revised two years later
 
@@ -393,7 +396,7 @@ beats every dense representation on the table.
 
 - Pretrain once on unlabelled text (someone else already paid)
 - Adapt with a few hundred examples — or none
-- The same model serves classification, extraction, generation
+- The same *paradigm* serves classification, extraction, generation
 - New task next quarter → a new prompt
 :::
 
@@ -428,6 +431,33 @@ unlabelled text, done once by someone else. A *prompt* is the text you send the
 model, instructions and examples included.
 :::
 
+## Not one model — three model families
+
+| Family | Representative | What it does | Strong at |
+|:--|:--|:--|:--|
+| **Encoder-only** | BERT (2019) | reads the whole text, a representation per token | classification, extraction, token labelling |
+| **Decoder-only** | GPT (2020) | predicts the next token left to right | generation, prompting, chat |
+| **Encoder-decoder** | T5 (2020) | reads an input sequence, writes an output sequence | translation, summarization, input→output |
+
+::: {.takeaway}
+Not "the same model does everything" — [the same pretraining paradigm made
+increasingly general model families possible.]{.hl}
+:::
+
+::: {.notes}
+This heads off the misreading the previous slide invites. What is shared is
+not one model but the idea of pretraining. Three architecture families are
+built on it, and they are strong at different jobs.
+
+The detail does not matter yet; what should stick is that the three exist and
+the choice depends on the task. Chapter 7 covers the architecture under all
+three, and the section at the end of that chapter covers which to pick when.
+
+Worth asking in class: "You are labelling maintenance records by failure
+type. Which family?" The answer leans encoder-only, and making them say why
+teaches the whole slide.
+:::
+
 ## Shift 3 · From "train a model" to "write an instruction"
 
 - A pretrained model is a text-continuation engine: powerful, and awkward to talk to
@@ -457,6 +487,33 @@ know which maintenance logs matter can question them directly, without a
 translation layer of engineers in between. Whether that is a good thing depends
 entirely on whether the answers are correct — which is why Chapter 22
 (Evaluating LLM Systems) exists.
+:::
+
+## ChatGPT is not a model — it is three layers
+
+| Layer | What it is | Chapter |
+|:--|:--|:--|
+| **Base model** | the raw text-continuation model, pretrained on unlabelled text | 8 |
+| **Instruction-following model** | after instruction tuning + training on human preferences | 9 |
+| **Application** | system prompt, retrieval (RAG), tools, guardrails, interface | Parts IV–V |
+
+::: {.takeaway}
+[When you argue about a behaviour, know which layer you mean]{.hl} — that is
+also the layer where the fix goes.
+:::
+
+::: {.notes}
+Most students take a system like ChatGPT to be, directly, "an LLM". What they
+see on screen is three layers stacked, and the distinction pays off across the
+whole book.
+
+The practical use: when someone says "the model made that up", the first
+question is which layer is responsible. Missing knowledge may be a missing
+application layer (retrieval); a problem with tone or refusal behaviour is the
+post-training layer; a problem with the language itself is the base model.
+
+A homework-sized question: have them guess which layer a behaviour in an
+assistant they use comes from, then check it in chapters 9 and 20.
 :::
 
 ## Why now, in one sentence
@@ -499,7 +556,7 @@ October 2024 — more than 280-fold, in under two years.
 ## Your discipline is already an NLP problem
 
 ::: {.lede}
-Six task families cover almost everything people actually build.
+Five task families cover almost everything; evaluation is a layer across all five.
 :::
 
 | Family             | Your documents                          | What you get                                                           | Chapter |
@@ -509,11 +566,13 @@ Six task families cover almost everything people actually build.
 | **Retrieval**      | Codes, regulations, technical specs     | The clause, with the citation                                          | 20      |
 | **Generation**     | Regulatory filings and reports          | Routine sections drafted from structured data; a human still signs     | 8       |
 | **Agents**         | Quality complaints plus production data | The system queries the database, runs the calculation, shows its work  | 23      |
-| **Evaluation**     | Any of the above, at scale              | A quantified error rate — the model as an instrument to be calibrated  | 22      |
+| **Evaluation** *(across every family)* | Any of the above, at scale | A quantified error rate — the model as an instrument to be calibrated | 22      |
 
 ::: {.notes}
-Six task families: classification, retrieval, extraction, generation, agents,
-and evaluation. The book's interactive explorer lets students pick their field;
+Five task families: classification, retrieval, extraction, generation and
+agents. Evaluation is not a sixth family but a layer across all five —
+whichever one you land in, you do not have a result until you can put a number
+on the error rate. It sits on its own row in the table, but say this in class. The book's interactive explorer lets students pick their field;
 this table takes one example per family from it, with the chapter the explorer
 points to (17 Prompting, 20 RAG, 8 the LLM landscape, 23 tools and agents,
 22 evaluation).
@@ -602,11 +661,23 @@ One slide on each.
 - It produces plausible text: correct most of the time, confidently wrong some of the time
 - [The two look identical from the outside.]{.hl} There is no internal flag distinguishing them
 - Ask which standard governs a weld inspection: it names one in the same steady tone, whether it read it in your document or assembled it from the shape of standards it has seen
+- [Writing with high confidence is not a calibrated measure of confidence in the answer]{.hl} — tone is not a probability
+- Knowledge in its parameters is bounded by the patterns learned in training: post-cutoff developments and internal documents are not reachable without a prompt, retrieval or a tool
 - Retrieval (Ch. 20) helps, by grounding answers in documents you trust — it does not eliminate the problem
 
 ::: {.notes}
 Plausible text is correct most of the time and confidently wrong some of the
 time. The uncomfortable part is that those two look identical from the outside.
+
+Press two points. First: the model writing in a confident tone is not a
+calibrated confidence about correctness. Students read this backwards by
+instinct.
+
+Second: we are not saying "the model only memorises the sentences it saw" — it
+can draw new inferences from the patterns it learned. The boundary is anything
+that appeared after the training data was collected, plus organisation-specific
+documents; those are not reachable unless put in the prompt, retrieved, or
+fetched with a tool.
 
 The weld-inspection example is the chapter's: the model names a standard in the
 same steady tone whether it read it in your document or assembled it from the
@@ -1038,7 +1109,7 @@ Fuller answers, from the chapter:
 
 ## Exercises
 
-1. Pick a document type from your own work. Which of the six task families applies to it, what would "success" mean as a number, and who is harmed by a confident wrong answer?
+1. Pick a document type from your own work. Which of the five task families applies to it, what would "success" mean as a number, and who is harmed by a confident wrong answer?
 2. Using the timeline, identify the single milestone whose removal would most delay the field's current state. Defend your choice against the two most obvious alternatives.
 3. Read the abstract of Bengio et al. (2003). What actually differs from a modern LLM? Which differences are ideas, and which are only scale?
 4. Find one public claim about AI capability made in the last month. Locate the evaluation underneath it. Does the claim survive contact with it?
