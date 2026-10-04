@@ -38,7 +38,7 @@ Model, sayılar üzerinde aritmetik yapan bir fonksiyondur. Bakım kaydı ise bi
 
 Aradaki köprünün tam olarak iki ayağı var:
 
-1. [birimlerin ne olduğuna karar vermek]{.hl} — **tokenization** (bölütleme)
+1. [birimlerin ne olduğuna karar vermek]{.hl} — **tokenization** (tokenleştirme)
 2. [her birimin hangi ağırlıkla katkı vereceğine karar vermek]{.hl} — **weighting** (ağırlıklandırma)
 
 ::: {.takeaway}
@@ -75,7 +75,8 @@ print(text.split())
 
 - Artık `arızalandı;` ile `arızalandı` farklı kelimeler. `Pompa` ile `pompa` da öyle, `P-101'in` ile `P-101` de
 - Her düzeltme ya ayrı kalması gerekenleri birleştirir ya da birlikte kalması gerekenleri ayırır
-- [Başarısız olma biçimleri, tokenization'ın bütün tasarım uzayını verir]{.hl}
+- [Başarısız olma biçimleri, tokenleştirmenin bütün tasarım uzayını verir]{.hl}
+- Çuvallayan şey **naif boşluk tokenleştirmesi**; ciddi bir kelime tokenizer'ı noktalamayı, kesmeyi, URL'yi ayrıca ele alır — düzeltemediği şey açık sözlük
 
 ::: {.notes}
 Bir model herhangi bir şeyi sayabilmeden önce, birinin "şey nedir" sorusuna
@@ -87,8 +88,10 @@ kaça mal olacağı.
 Bu kararın alındığını kimse duyurmaz. Bir kütüphaneye yapılan tek satırlık
 çağrının içine gizlenmiş gelir. Bu kısım, onu bilerek vermekle ilgili.
 
-Terimler: *tokenization* (bölütleme), bir metin akışını modelin sayacağı
-parçalara bölmek. Neyin parça sayılacağı dile ait bir olgu değil, bir tasarım
+Terimler: *tokenization* (tokenleştirme), bir metin akışını modelin sayacağı
+parçalara bölmek. Kitap "bölütleme" yerine "tokenleştirme" diyor; öğrenci
+kütüphanelerde ve hata mesajlarında *tokenizer*, *token*, *tokenization*
+görecek. Neyin parça sayılacağı dile ait bir olgu değil, bir tasarım
 kararı. *Token* (birim) o parçalardan biri: çoğu zaman bir kelime, bazen bir
 kelimenin parçası, bazen bir noktalama işareti. Bir satıcı "token başına" ücret
 aldığında saydığı şey budur.
@@ -98,7 +101,7 @@ aldığında saydığı şey budur.
 
 | Adım | [Size ne kazandırır]{.pro} | [Size neye mal olur]{.con} | Varsayılan |
 |:--|:--|:--|:--|
-| **Küçük harfe çevirme** | `Pompa` = `pompa`, birçok sayımı yarıya indirir | `AŞ` şirketi ile `aş` fiili aynılaşır; Türkçede `str.lower()` sessizce yanlıştır | İngilizce için evet; başka dillerde yalnızca yerel ayara duyarlı işlevle |
+| **Küçük harfe çevirme** | `Pompa` = `pompa`, birçok sayımı yarıya indirir | `AŞ` şirketi ile `aş` fiili aynılaşır; Türkçede `str.lower()` sessizce yanlıştır | İngilizce için evet; Türkçe ve Azerice gibi `I/İ` dillerinde yerel ayara duyarlı dönüşüm şart |
 | **Noktalama temizleme** | `arızalandı;` = `arızalandı` | `P-101`'i, ondalıkları, URL'leri, kimyasal formülleri bozar | Hayır — seçerek temizleyin |
 | **Stop word atma** | `the`, `is`, `of` düşer: burada token'ların %43,9'u | Olumsuzlamayı (`not`) ve *to be or not to be* gibi ifadeleri yok eder | Yalnızca seyrek sayım modellerinde |
 | **Gövdeleme** (stemming) | `kitaplarımızdan` → `kitap`; çekimleri ucuza toplar | Kaba ek kırpma: `university` → `univers` = `universe` | Hayır |
@@ -119,7 +122,7 @@ bahis. Küçük harfe çevirme konu sınıflandırmasında genellikle bedavadır
 ismi tanımada ise büyük harf sinyalin parçasıdır; çevirmek işe yarar bir ipucunu
 siler.
 
-Gövdeleme ile sözlük biçimine indirgeme aynı şeyi hedefler, ama aynı işlem
+Gövdeleme ile lemmatizasyon (sözlük biçimine indirgeme) aynı şeyi hedefler, ama aynı işlem
 değildir. Gövdeleme (Porter 1980) yeniden yazma kuralları uygular ve sonucun
 gerçek bir kelime olup olmadığını umursamaz. Sözlük biçimine indirgeme sözlükte
 aradığınız biçimi döndürür; İngilizcede `left` kelimesinin bir cümlede `leave`
@@ -257,6 +260,18 @@ Birleştirme tablomuz *karakterler* üzerinde öğrenildi ve gördüğü alfabe 
 Bayt düzeyinde bir tokenizer kuruluş gereği her olası diziyi temsil edebilir:
 emoji, Çince ve `görüşebileceklerimiz`deki `ş` dâhil. Sonraki slaytlarda ölçülen
 bütün OpenAI kodlamaları bayt düzeyinde.
+
+Bir çekince daha, sınıfta söylemeye değer: bayt düzeyinde BPE sık geçen bayt
+dizilerini birleştirir ve bu çoğu sık karakteri tek token yapar, ama
+birleştirmeler Unicode karakter sınırlarına bağlı değildir. Algoritma
+karakterin nerede bittiğini bilmiyor. Bu yüzden bir token tam bir karakteri de,
+birkaç karakteri de, bir UTF-8 karakterinin yalnızca bir parçasını da temsil
+edebilir — sonraki slaytta `görüşebileceklerimiz`in parçalanışında üçünü de
+göreceksiniz.
+
+Bir de yaygınlık iddiasını abartmayın: GPT tipi birçok model bayt düzeyinde
+BPE ya da bir varyantını kullanıyor, ama BERT ailesi WordPiece, T5 ve Gemma
+gibi modeller SentencePiece (Unigram ya da BPE kipinde) kullanıyor.
 :::
 
 ## Türkçe için faturayı kim ödüyor
@@ -349,6 +364,37 @@ bayt. macOS dosya adları, birçok PDF çıkarımı ve bazı web formları NFD v
 Bölümdeki her ölçüm NFC çağrısından sonra alındı. Lütfen yine de doğru Türkçe
 yazın; sadece bedelini bilin ve çok dilli bir sistemi asla yalnızca token
 sayısıyla kıyaslamayın.
+:::
+
+## Bir tokenizer'ın dört aşaması
+
+1. **Normalleştirme** — Unicode normalleştirmesi (NFC/NFD), küçük harfe çevirme, aksan atma
+2. **Ön tokenleştirme** — boşluk ve noktalama sınırlarında kaba parçalara bölme (SentencePiece bunu atlar)
+3. **Alt kelime kodlaması** — BPE / WordPiece / Unigram, her parçanın *içinde* çalışır
+4. **Özel token'lar** — modelin beklediği işaretleri ekleme
+
+| token | ne işe yarar |
+|:--|:--|
+| `[UNK]` | sözlükte karşılığı olmayan girdi; bayt düzeyinde neredeyse hiç görülmez |
+| `[PAD]` | batch'teki kısa dizileri aynı uzunluğa getiren dolgu |
+| `[CLS]` | BERT'te bütün diziyi temsil eden baştaki token |
+| `[SEP]` | iki parça arasındaki sınır |
+| BOS / EOS | dizi başı ve sonu; üretimde EOS "bitti" demektir |
+
+::: {.takeaway}
+[BPE ham metnin tamamı üzerinde çalışmaz]{.hl} — 3. aşamada, her parçanın içinde çalışır.
+:::
+
+::: {.notes}
+Bu slayt öğrencinin kafasındaki iki soruyu aynı anda kapatıyor: "BPE bütün
+dizgiyi mi yiyor?" ve "tokenizer çıktısındaki bu köşeli parantezli şeyler ne?"
+
+Birinci aşamada ne sildiğinize geri dönemezsiniz; Unicode normalleştirmesi
+burada, daha önce gördüğümüz NFC/NFD örneğiyle aynı yer.
+
+Adlandırma modele göre değişiyor — `<s>`, `</s>`, `<|endoftext|>` aynı işleri
+görüyor. Sınıfta hatırlatmaya değer: özel token'lar da bağlam penceresinden pay
+alıyor, yani token sayarken onları da sayın.
 :::
 
 ## Sezgi kontrolü · karakterler {.question}
@@ -1486,6 +1532,7 @@ bu üç yerden birinde.
 6. **Kendi verinizde Zipf.** Kendi derleminizde sıraya karşı frekansı log-log ölçekte çizin. Çizgi düz görünüyor mu? İlk beş token ne — içlerinde `'ax` gibi bir artefakt var mı?
 7. **Türkçe morfoloji faturası.** Bir teknik terim seçin (`basınç`, `sıcaklık`, `dayanım`) ve ondan türetilmiş beş çekimli biçimi `tiktoken` ile sayın. Kelime başına token sayısı nasıl büyüyor? Aynı biçimleri ASCII'ye indirgeyip yeniden sayın.
 8. **Mülakat alıştırması.** Chip Huyen'in kitabındaki §8.2.1 beş belgelik TF-IDF sıralama problemini kâğıt kalemle çözün: bir belge sorgu terimini bir yerine üç kez geçirirse sırası ne olur, bu arzu edilir mi? `TfidfVectorizer` ile kontrol edin.
+9. **Türkçe faturasını tek cümleden çıkarın.** Paralel bir metinden 50–100 cümle çifti toplayın; her dil ve tokenizer için **1.000 karakter başına token medyanını** ve yayılımını bildirin. Tek cümlelik ölçüm o yayılımın neresine düşüyor?
 :::
 
 ::: {.notes}
@@ -1515,7 +1562,7 @@ Bölümdeki listeden bir seçki; daha fazlasını isteyenler için gerisi:
 - minbpe: GPT sınıfı bir tokenizer'ı sıfırdan kuran birkaç yüz satır temiz Python.
 - Jurafsky & Martin: bölümler Ocak 2026 taslağında yeniden numaralandı; "vektör
   anlambilimi için 6. bölüm" diyen eski blog yazıları artık güncel değil.
-- Manning, Raghavan & Schütze: gövdeleme ve sözlük biçimine indirgeme ile BM25
+- Manning, Raghavan & Schütze: gövdeleme ve lemmatizasyon ile BM25
   sayfalarına da bakın. Tamamı ücretsiz.
 - Silge & Robinson, *Text Mining with R*: matrislerle değil veri çerçeveleriyle
   düşünen istatistikçiler için TF-IDF bölümü daha hızlı oturabilir.

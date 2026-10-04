@@ -75,6 +75,7 @@ print(text.split())
 - `fail;` and `fail` are now different tokens. So are `The` and `the`, and `it's` and `it is`
 - Each fix either merges things that should stay apart, or splits things that should stay together
 - [The ways this fails are the entire design space of tokenization]{.hl}
+- What fails is **naive whitespace tokenization**; a serious word tokenizer handles punctuation, apostrophes and URLs — what it cannot fix is the open vocabulary
 
 ::: {.notes}
 Before a model can count anything, something has to decide what a *thing* is.
@@ -96,7 +97,7 @@ thing being counted.
 
 | Step | [What it buys you]{.pro} | [What it costs you]{.con} | Default |
 |:--|:--|:--|:--|
-| **Lowercasing** | `Pump` = `pump`, halving many counts | `US` → `us`, `Apple` → `apple`; in Turkish `str.lower()` is silently wrong | Yes for English; elsewhere only locale-aware |
+| **Lowercasing** | `Pump` = `pump`, halving many counts | `US` → `us`, `Apple` → `apple`; in Turkish `str.lower()` is silently wrong | Yes for English; Turkish and Azerbaijani need a locale-aware conversion |
 | **Punctuation stripping** | `fail;` = `fail` | Destroys `P-101`, decimals, URLs, chemical formulas | No — strip selectively |
 | **Stop word removal** | drops `the`, `is`, `of`: 43.9% of tokens here | Destroys negation (`not`), and *to be or not to be* | Only for sparse count models |
 | **Stemming** | `replaced` → `replac`, cheaply | Crude suffix chopping: `university` → `univers` = `universe` | No |
@@ -246,6 +247,17 @@ characters that are not in the vocabulary at all.
 A byte-level tokenizer can represent every possible string by construction —
 emoji, Chinese, and the `ş` in `görüşebileceklerimiz`. Every OpenAI encoding
 measured on the next slides is byte-level.
+
+One more caveat worth saying out loud in class: byte-level BPE merges frequent
+byte sequences, and that does make most frequent characters single tokens, but
+the merges are not bound to Unicode character boundaries. The algorithm does
+not know where a character ends. So a token can stand for a whole character,
+for several, or for only part of one UTF-8 character — the split of
+`görüşebileceklerimiz` on the next slide shows all three.
+
+And do not overstate how universal this is: many GPT-type models use
+byte-level BPE or a variant, but the BERT family uses WordPiece, and models
+like T5 and Gemma use SentencePiece in Unigram or BPE mode.
 :::
 
 ## Who pays for Turkish
@@ -329,6 +341,37 @@ anyway; just know what it costs, and never benchmark a multilingual system on
 token counts alone.
 :::
 
+## The four stages of a tokenizer
+
+1. **Normalization** — Unicode normalization (NFC/NFD), lowercasing, stripping diacritics
+2. **Pre-tokenization** — splitting into rough pieces at whitespace and punctuation (SentencePiece skips this)
+3. **Subword encoding** — BPE / WordPiece / Unigram, running *inside* each piece
+4. **Special tokens** — adding the markers the model expects
+
+| token | what it is for |
+|:--|:--|
+| `[UNK]` | input with no vocabulary entry; nearly absent at byte level |
+| `[PAD]` | padding that evens up short sequences in a batch |
+| `[CLS]` | in BERT, the leading token standing for the whole sequence |
+| `[SEP]` | the boundary between two segments |
+| BOS / EOS | start and end of sequence; in generation EOS means "finished" |
+
+::: {.takeaway}
+[BPE does not run on the whole raw string]{.hl} — it runs at stage 3, inside each piece.
+:::
+
+::: {.notes}
+This slide closes two student questions at once: "does BPE eat the whole
+string?" and "what are those square-bracket things in the tokenizer output?"
+
+What you delete at stage 1 you cannot get back; Unicode normalization lives
+here, the same place as the NFC/NFD example from earlier.
+
+The spellings differ by model — `<s>`, `</s>`, `<|endoftext|>` do these jobs.
+Worth reminding the class that special tokens take their share of the context
+window too, so count them when you count tokens.
+:::
+
 ## Intuition check · characters {.question}
 
 ::: {.ask}
@@ -339,7 +382,7 @@ A character vocabulary is tiny, needs no training, and in bytes never meets an u
 - **Sequence length is the binding constraint**
 - Attention grows with the *square* of sequence length, everything else in the layer linearly (Ch. 7)
 - A sequence 5× longer costs between 5× and 25×, depending on where you sit relative to the model width — and the quadratic term eventually wins
-- [Subwords are a compression scheme: they buy shorter sequences by spending vocabulary]{.hl}
+- [Subword tokenization is a representation trade-off: you buy shorter sequences by spending vocabulary]{.hl} — BPE really was a compression algorithm in 1994, but the goal here is choosing units
 :::
 
 ::: {.notes}
@@ -574,7 +617,7 @@ is the lesson.
 - [It looks flat on a plot long before it stops growing]{.hl} — that is the trap
 
 ::: {.takeaway}
-There is no corpus size at which you stop meeting new words. There is only a size at which you stop meeting them *quickly*.
+On realistic corpora you keep meeting new types as the data grows; there is only a size at which you stop meeting them *quickly*. Heaps is an empirical relationship that models it.
 :::
 
 ::: {.src}
@@ -1460,6 +1503,7 @@ is almost always in one of those three places.
 5. **Find the negation failure.** Construct two documents from your own field with opposite operational meaning and TF-IDF cosine similarity above 0.9. Then write the sentence you would put in a design review explaining why this model must not be used for that decision.
 6. **Zipf on your own data.** Plot rank against frequency on log-log axes for a corpus you own. Does the line look straight? What are the top five tokens — is any of them an artifact like `'ax`?
 7. **The interview exercise.** Work through the five-document TF-IDF ranking problem in §8.2.1 of Chip Huyen's book with pen and paper, including its follow-up: if one document mentions the query term three times instead of once, what happens to its rank, and is that desirable? Check yourself with `TfidfVectorizer`.
+8. **Get the Turkish bill off a single sentence.** Collect 50–100 sentence pairs from a parallel text; for each language and tokenizer report the **median tokens per 1,000 characters** and its spread. Where in that spread does the single-sentence measurement land?
 :::
 
 ::: {.notes}
