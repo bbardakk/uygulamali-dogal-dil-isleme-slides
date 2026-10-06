@@ -27,7 +27,7 @@ number shown. Then what this representation cannot do, which is the reason the
 next chapter exists, and a real experiment on whether any of it still matters.
 
 Every number in the chapter was produced by running the code shown, with
-scikit-learn 1.9 and tiktoken 0.13.
+scikit-learn 1.9, tiktoken 0.13, sentencepiece 0.2.2 and tokenizers 0.22.
 :::
 
 ## The problem, in one sentence
@@ -36,7 +36,7 @@ scikit-learn 1.9 and tiktoken 0.13.
 A model is a function that does arithmetic on numbers. Text is a string of characters.
 :::
 
-The bridge between them has exactly two spans:
+A model cannot compute with letters; text has to become numbers first. The bridge from text to numbers has two spans:
 
 1. [decide what the units are]{.hl} — **tokenization**
 2. [decide what number each unit contributes]{.hl} — **weighting**
@@ -54,8 +54,12 @@ field whose dense half students meet in Chapter 3 (Embeddings). They still win
 on small data, they still power production search, and interviews for applied
 NLP roles routinely probe whether you understand them.
 
-More importantly: the *decisions* they force you to make are the same decisions
-a modern pipeline forces on you. Only here, you can see them.
+More importantly: building these simple representations forces a series of
+*decisions* on you. Which units do you cut the text into? Which differences do
+you erase? What do you count and what do you throw away? A system built on a
+large language model makes the same decisions today. There they are buried
+inside a ready-made tokenizer or library. Here you make each one yourself, so
+you can see it.
 
 The statistician's framing in the takeaway is the chapter's margin note, and it
 serves for the whole lecture.
@@ -104,25 +108,30 @@ thing being counted.
 | **Lemmatization** | `replaced` → `replace`, correctly | Needs a dictionary and part-of-speech tagging; slow | Rarely — subwords are cheaper |
 
 ::: {.takeaway}
-Read the last column with suspicion: it is a default, not a rule. [Try both and measure.]{.hl}
+Read the table's last column with suspicion: what it holds is a default, not a rule. [Try both and measure.]{.hl}
 :::
 
 ::: {.notes}
-Normalization is deliberately erasing differences you have decided not to care
-about. Why not erase as much as possible? Because every step also destroys
-something, and you do not find out what until later. The table gives the
+The example on the previous slide left three decisions: should `The` and `the`
+count as one word, should the semicolon go, should `it's` and `it is` be
+merged? All three are the same kind: erase the difference between two
+spellings, or keep it. Normalization is deliberately erasing differences you
+have decided not to care about. Why not erase as many as possible? Because
+every step also destroys something, and you do not find out what until later. The table gives the
 argument *against* each step — because the arguments against are what
 interviewers actually ask about.
 
 Every step is a bet that the distinction it erases does not matter for *your*
 task. Lowercasing is usually free in topic classification and removes a useful
-cue in named entity recognition, where capitalisation is part of the signal.
+cue in named entity recognition (NER), where capitalisation is part of the
+signal.
 
 Stemming and lemmatization aim at the same thing — collapsing inflected forms —
 but they are not the same operation. Stemming (Porter 1980) applies rewrite
 rules and does not care whether the result is a word. Lemmatization returns the
-dictionary form and needs to know that `left` is the past tense of `leave` in
-one sentence and a direction in another.
+dictionary form — the form you would look the word up under, the infinitive of
+a verb or the uninflected form of a noun — and needs to know that `left` is the
+past tense of `leave` in one sentence and a direction in another.
 
 The modern answer to "which should I use?" depends on the pipeline. Feeding a
 pretrained transformer: use the model's own tokenizer and do neither — subwords
@@ -151,6 +160,10 @@ recall@1 from 28.0% to 95.3%.
 - `scikit-learn`'s English list: 318 words, [0.4% of the vocabulary but 43.9% of all tokens]{.hl} — a compression win for a sparse model, a catastrophe if the signal is in *not*
 
 ::: {.notes}
+This is the first mention of Unicode; introduce it in one sentence: the shared
+table that gives every letter and sign of every writing system a number (`A`
+is 65, `ç` is 231, `İ` is 304). The detail comes a few slides later.
+
 Python's `str.lower()` implements the Unicode *default* case mapping — the
 language-independent one. The standard defines language-specific tailorings
 alongside it, and does not apply them unless you ask. Turkish needs a tailoring,
@@ -165,6 +178,38 @@ before counting — *the*, *of*, *is*. Whether that is a saving or a mistake
 depends entirely on the task.
 :::
 
+## One word at three unit sizes
+
+Suppose `unbreakable` never appeared in the training text:
+
+| Unit | How `unbreakable` looks | Result |
+|:--|:--|:--|
+| **Word** | `<UNK>` | [Not in the vocabulary: the model gets nothing but the "unknown word" marker]{.con} |
+| **Character** | `u` `n` `b` `r` `e` `a` `k` `a` `b` `l` `e` | [Nothing is lost, but one word became 11 units, and `u` on its own says nothing]{.con} |
+| **Subword** | `un` `break` `able` | [3 units, each familiar from other words: `undo`, `breaking`, `readable`]{.pro} |
+
+::: {.takeaway}
+Who chose `un`, `break` and `able`? [Nobody did. They were found by counting.]{.hl}
+:::
+
+::: {.src}
+Last row: how the `cl100k_base` tokenizer actually splits this word
+:::
+
+::: {.notes}
+Word-level tokenization has a problem it cannot solve on its own: the
+vocabulary never closes. Character-level tokenization has the opposite problem:
+sequences become very long and each unit means almost nothing. Subwords are the
+middle road.
+
+This slide shows the three options on one word instead of describing them in
+the abstract. The split in the last row is not made up; OpenAI's `cl100k_base`
+tokenizer cuts `unbreakable` exactly there.
+
+The question that leads to the next slide: who chose those pieces? The answer
+is byte-pair encoding.
+:::
+
 ## Byte-pair encoding: count, merge, repeat
 
 :::: {.columns}
@@ -175,7 +220,7 @@ depends entirely on the task.
 3. Merge the most frequent pair into a new symbol
 4. Repeat
 
-Toy corpus: `low` ×5, `lower` ×2, `newest` ×6, `widest` ×3
+A four-word corpus: `low` ×5, `lower` ×2, `newest` ×6, `widest` ×3
 
 [Nobody told it that English has suffixes.]{.hl} It counted.
 :::
@@ -202,10 +247,8 @@ Sennrich et al. 2016
 :::
 
 ::: {.notes}
-Word-level tokenization has an unfixable problem: the vocabulary never closes.
-Character-level tokenization has the opposite problem: sequences become very
-long and each unit means almost nothing. Byte-pair encoding splits the
-difference by *learning* its units from data (Sennrich et al. 2016).
+Byte-pair encoding (BPE) is how the middle road of the previous slide is found:
+it *learns* its units from data (Sennrich et al. 2016).
 
 `</w>` marks the end of a word. Look at what happened without anyone supplying a
 grammar. The first two merges build `est` — the English superlative suffix — and
@@ -227,37 +270,137 @@ widest   -> wi d est</w>
 ```
 
 - To tokenize, replay the learned merges in the order they were learned
-- `lowest` never appeared in training: [an unseen *word* never needs an `<UNK>` token]{.hl}. It degrades to shorter pieces, as `slow` partly does; it does not fail
-- An unseen *character* still breaks this toy: `çay` → `('ç', 'a', 'y', '</w>')`, none of them in the vocabulary
-- Real tokenizers start from the 256 possible **bytes** of UTF-8, so every string is representable — which is *why* a Turkish word costs more tokens instead of becoming `<UNK>`
+- `lowest` never appeared in training, and it is still cut into two pieces the model knows
+- [As long as every character of a word is in the alphabet, an unseen *word* does not become `<UNK>`]{.hl}: in the worst case it is cut into shorter pieces
+- Notice the condition: an unseen *character* still breaks this example. `çay` → `('ç', 'a', 'y', '</w>')`, none of them in the vocabulary
 
-::: {.src}
-Radford et al. 2019
+::: {.notes}
+This is the main reason subwords won: in the worst case a word is cut into
+shorter pieces. Representation quality drops; the input does not become
+unrepresentable.
+
+State the condition out loud: every *character* of the new word has to be in
+the alphabet the merges were learned over. Ours came from `low`, `lower`,
+`newest` and `widest` only. So `apply_merges("çay", merges)` returns characters
+that are not in the vocabulary at all.
+
+This is where real tokenizers differ from this small example. The next three
+slides take it up: first the terms character, Unicode and byte; then starting
+from bytes; then byte fallback.
+:::
+
+## Character, ASCII, Unicode, byte
+
+- **ASCII** (1963): 128 numbers for the English letters, digits and punctuation. No `ç`, `ş` or `ğ`
+- **Unicode**: one number for every character of every writing system — its **code point**
+- **Byte**: a number from 0 to 255. **UTF-8** writes each code point as 1 to 4 bytes
+
+| | `ç` | `a` | `y` |
+|:--|:--|:--|:--|
+| Unicode code point | 231 (U+00E7) | 97 (U+0061) | 121 (U+0079) |
+| In the ASCII table? | no | yes | yes |
+| UTF-8 bytes | 195, 167 | 97 | 121 |
+
+::: {.takeaway}
+`çay` (tea): three letters to you, three numbers to Unicode, [four bytes on disk.]{.hl}
 :::
 
 ::: {.notes}
-This is the entire reason subwords won: in the worst case a word falls back to
-shorter pieces.
+Students mix these four words up all the time, which is why they get a slide.
 
-The caveat is the difference between a toy and a production tokenizer. Our
-merge table was learned over *characters*, and the alphabet it saw was only
-`low`, `lower`, `newest`, `widest`. So `apply_merges("çay", merges)` returns
-characters that are not in the vocabulary at all.
+A character is a letter or sign as you see it on screen. A computer cannot
+store letters, only numbers, so every character needs a number. ASCII is the
+first widely used table that assigns them. Unicode is the same idea extended to
+every writing system; the 128 ASCII characters keep their numbers in Unicode
+(`a` is still 97).
 
-A byte-level tokenizer can represent every possible string by construction —
-emoji, Chinese, and the `ş` in `görüşebileceklerimiz`. Every OpenAI encoding
-measured on the next slides is byte-level.
+A byte is the basic unit a computer stores data in: eight bits, 256 different
+values. Unicode's numbers go far beyond 255, so a character does not always fit
+in one byte. An encoding decides which bytes store a code point. UTF-8 writes 0
+to 127, the ASCII characters, as a single byte and larger numbers as two, three
+or four bytes.
 
-One more caveat worth saying out loud in class: byte-level BPE merges frequent
-byte sequences, and that does make most frequent characters single tokens, but
-the merges are not bound to Unicode character boundaries. The algorithm does
-not know where a character ends. So a token can stand for a whole character,
-for several, or for only part of one UTF-8 character — the split of
-`görüşebileceklerimiz` on the next slide shows all three.
+You can show it in Python: `len("çay")` is 3, `len("çay".encode("utf-8"))` is 4.
+:::
 
-And do not overstate how universal this is: many GPT-type models use
-byte-level BPE or a variant, but the BERT family uses WordPiece, and models
-like T5 and Gemma use SentencePiece in Unigram or BPE mode.
+## Characters or bytes: what BPE starts from
+
+::: {.lede}
+The list of characters is **open-ended**: Unicode defines well over a hundred thousand. The list of bytes is **closed**: 256 values.
+:::
+
+```text
+çay   2 tokens  [b'\xc3\xa7', b'ay']
+şişe  3 tokens  [b'\xc5\x9fi', b'\xc5\x9f', b'e']
+ŞİŞE  6 tokens  [b'\xc5', b'\x9e', b'\xc4\xb0', b'\xc5', b'\x9e', b'E']
+😀     2 tokens  [b'\xf0\x9f\x98', b'\x80']
+```
+
+- A tokenizer that starts from bytes has a complete alphabet from the first step: [nothing becomes `<UNK>`, rare characters just become expensive]{.hl}
+- `ç` is one token: its two bytes were frequent enough to merge. `ŞİŞE` costs twice what `şişe` does
+- The merges are not bound to character boundaries: `b'\xc5'` is *half a character*
+
+::: {.src}
+`cl100k_base` · Radford et al. 2019 · Gage 1994
+:::
+
+::: {.notes}
+A tokenizer that starts from characters has an alphabet made of the characters
+in its training text. However much text it sees, some character can still be
+missing. A tokenizer that starts from bytes cannot meet a symbol it does not
+know; every text in every language is a sequence of the 256 values.
+
+The output is from OpenAI's byte-level `cl100k_base`. Read three things in it:
+`ç` is a single token; capital `Ş` was rare in training, so its two bytes never
+merged; the emoji is split the same way. A token can hold a whole character,
+several characters, or only part of one.
+
+A short note on history: the name BPE comes from a data-compression algorithm
+published in 1994 (Gage 1994). GPT-2 introduced byte-level BPE with a
+50,257-token vocabulary (Radford et al. 2019).
+
+Keep two questions apart. A byte-level design guarantees *coverage*. How *many*
+tokens a language costs is a separate question: it depends on how much of that
+language the tokenizer's training data held. The measurement for Turkish comes
+in a moment.
+
+BPE is not the only way to learn a subword vocabulary. It has two relatives:
+WordPiece, which BERT uses, and Unigram, which T5 uses. The book explains them
+in Chapter 8, where it looks at BERT's tokenizer; Chapter 2 keeps a collapsed
+deep-dive box for the curious. This lecture uses BPE alone.
+:::
+
+## Byte fallback: spelling an unknown character out in bytes
+
+::: {.lede}
+A third design: the vocabulary is built from characters, but one token for each of the 256 byte values is added to it.
+:::
+
+```text
+byte_fallback=False  vocabulary  20  ['▁', 'ç', 'a', 'y']  ->  ' ⁇ ay'
+byte_fallback=True   vocabulary 276  ['▁', '<0xC3>', '<0xA7>', 'a', 'y']  ->  'çay'
+```
+
+- SentencePiece was trained twice on eight Turkish words with no `ç` in them; both models were then given `çay`
+- Off: `ç` gets the "unknown" id, and turned back into text [the letter is gone]{.con} (`⁇`)
+- On: the two bytes of `ç` are written instead (C3 is 195, A7 is 167), and [`çay` comes back intact]{.pro}
+
+::: {.src}
+`sentencepiece` 0.2.2, `byte_fallback=True`
+:::
+
+::: {.notes}
+The tokenizer handles the characters it knows as usual. When it meets one it
+does not know, it writes that character's UTF-8 bytes one by one with the byte
+tokens instead of writing `<UNK>`.
+
+Tie the numbers to the previous slide: `<0xC3>` and `<0xA7>` are the two bytes
+from the `çay` table (195 and 167). The vocabulary grew from 20 to 276: the 256
+byte tokens were added.
+
+The leading `▁` marks where a word starts; it comes back a few slides on.
+
+The code for the experiment is in the chapter; fifteen lines.
 :::
 
 ## Who pays for Turkish
@@ -303,11 +446,14 @@ on their own text in Exercise 1.
 | `evler` | `' ev'` `ler` | 2 |
 | `evlerimiz` | `' ev'` `ler` `im` `iz` | 4 |
 | `evlerimizden` | `' ev'` `ler` `im` `iz` `den` | **5** |
-| `gorusebileceklerimiz` | `gor` `use` `b` `ile` `cek` `ler` `im` `iz` | 8 |
-| `görüşebileceklerimiz` | `g` `ör` `ü` `ş` `eb` `ile` `cek` `ler` `im` `iz` | **10** |
 
-- *from our houses*: three English words, three tokens. [Better linguistics, worse bill.]{.hl} The splits match the morphology at three of four boundaries
-- Correct Turkish costs 25% more than ASCII Turkish on this word. First line of any non-ASCII pipeline: `unicodedata.normalize("NFC", text)`
+- *from our houses*: three English words, three tokens. [Better linguistics, worse bill.]{.hl}
+- The splits match the real morphology at three of four boundaries. The asterisk is `im|iz`: *-imiz* ("our") is a single morpheme
+- `o200k_base` cuts the same word as `ev|ler|imiz|den`: the cut depends on the merge table, not on the language
+
+::: {.takeaway}
+Bring Turkish text into one form before it reaches the tokenizer: `unicodedata.normalize("NFC", text)`
+:::
 
 ::: {.notes}
 Why does it happen? Turkish is agglutinative: meaning is built by stacking
@@ -319,57 +465,115 @@ real morphology at three of its four boundaries — *ev* (house), *-ler*
 (plural), *-den* (from) — and nobody supplied a rule of Turkish grammar. The
 asterisk is `im|iz`: *-imiz* ("our") is a single morpheme that BPE cut in half,
 because `im` and `iz` are each frequent on their own. Frequency is a good proxy
-for morphology, not a substitute — and at equal vocabulary size, unigram LM
-segments closer to morphology than BPE does (Bostrom & Durrett 2020).
+for morphology, not a substitute.
 
-Two conventions collide in the outputs. GPT's BPE tokenizers and BERT's
-WordPiece first pre-tokenize on whitespace and punctuation, so word boundaries
-must survive into the token: GPT attaches the preceding space (`' ev'`), while
-SentencePiece (Kudo & Richardson 2018) — which runs on the raw string — writes a
-visible marker, `▁ev`.
+One sentence is enough for the NFC line in the takeaway: a letter with a mark,
+such as `ö`, can be stored in two different ways (one code point, or `o` plus a
+separate "two dots" mark). The two look the same on screen, but a tokenizer
+counts them differently. Every measurement in the chapter was taken after that
+call.
 
-Diacritics: ten tokens against eight. The direction is general; the exact factor
-depends on the tokenizer and on which letters the text uses.
-
-NFC: `ö` can be stored as one code point (U+00F6, NFC) or as `o` plus a
-combining diaeresis (U+0308, NFD). They look identical, compare unequal in
-Python, and cost different numbers of tokens — `görüşebileceklerimiz` is 20
-characters and 23 bytes in NFC, 23 characters and 26 bytes in NFD. macOS
-filenames, many PDF extractions and some web forms hand you NFD. Every
-measurement in the chapter was taken after the NFC call. Write correct Turkish
-anyway; just know what it costs, and never benchmark a multilingual system on
-token counts alone.
+Point at the space in front of `' ev'` in the table; it is the subject of the
+next slide.
 :::
 
-## The four stages of a tokenizer
+## Where did the spaces go? {.smaller}
 
-1. **Normalization** — Unicode normalization (NFC/NFD), lowercasing, stripping diacritics
-2. **Pre-tokenization** — splitting into rough pieces at whitespace and punctuation (SentencePiece skips this)
-3. **Subword encoding** — BPE / WordPiece / Unigram, running *inside* each piece
-4. **Special tokens** — adding the markers the model expects
+`evlerimizden geldik` ("we came from our houses") — the same two words in three tokenizer families (`␣` stands for a space):
+
+| Family (tokenizer that was run) | Tokens | How it marks the word boundary |
+|:--|:--|:--|
+| **GPT** (`cl100k_base`) | `ev` `ler` `im` `iz` `den` `␣geld` `ik` | Glues the space onto the first token of the *next* word |
+| **SentencePiece** (XLM-R) | `▁ev` `lerimiz` `den` `▁geldi` `k` | Puts a visible `▁` at the start of a word |
+| **WordPiece** (multilingual BERT) | `ev` `##leri` `##mi` `##zde` `##n` `geldi` `##k` | Puts `##` in front of every piece that *continues* a word |
+
+- **Words first, then pieces.** The text is first cut into words at whitespace and punctuation: **pre-tokenization**. [No token ever spans two words]{.hl}
+- To turn tokens back into text, where a word starts is written on the token itself
+- SentencePiece does not pre-tokenize: it treats the space as an ordinary character and replaces it with `▁`
+
+::: {.src}
+Kudo & Richardson 2018
+:::
+
+::: {.notes}
+Why does the `' ev'` token on the previous slide carry a space in front? This
+slide is the answer.
+
+GPT's BPE tokenizers and BERT's WordPiece do not apply their merges to the
+sentence as a whole. They first cut the text into words (GPT-2 does it with a
+regular expression) and only then split each word into subwords, inside its own
+boundaries.
+
+Cutting the text into words throws the spaces away. Ask the class: how would
+you join the pieces `ev`, `ler`, `geld`, `ik` — as `evler geldik`, or as
+`ev ler geld ik`? The only way to know is to write on the token where a word
+starts. The three families do it with three different marks, and all three
+carry the same information: "a new word starts here".
+
+That SentencePiece does not pre-tokenize is what makes it work for languages
+such as Japanese and Chinese, which do not put spaces between words.
+
+All three rows of the table were produced by running the tokenizers.
+:::
+
+## The four stages of a tokenizer {.smaller}
+
+`Çay içtik, sonra evlerimizden çıktık.` ("We drank tea, then we left our houses.") — step by step through multilingual BERT's tokenizer:
+
+| Stage | Output |
+|:--|:--|
+| **1. Normalization** | `cay ictik, sonra evlerimizden cıktık.` |
+| **2. Pre-tokenization** | `cay` `ictik` `,` `sonra` `evlerimizden` `cıktık` `.` |
+| **3. Subword encoding** | `cay` `ic` `##tik` `,` `sonra` `ev` `##leri` `##mi` `##zde` `##n` `cıktı` `##k` `.` |
+| **4. Special tokens** | `[CLS]` `cay` `ic` `##tik` `,` `sonra` `ev` `##leri` `##mi` `##zde` `##n` `cıktı` `##k` `.` `[SEP]` |
+
+- What the first stage deletes does not come back: the model [can no longer tell `çay` (tea) from `cay`]{.con}
+- Subword encoding runs *inside* each word: `evlerimizden` is five pieces, `sonra` stays whole
+- What reaches the model is not these pieces but their ids: `101, 21373, 11797, …, 119, 102`
+
+::: {.src}
+`bert-base-multilingual-uncased`, `tokenizers` 0.22
+:::
+
+::: {.notes}
+Text goes through four stages, in order, before it reaches the model. This
+slide follows them on one Turkish sentence; every row of the table is real
+output.
+
+Normalization: this tokenizer lowercases everything and strips the marks from
+letters. `Çay` → `cay`, `içtik` → `ictik`. `ı` survived because Unicode defines
+it as a letter of its own, not as an `i` with a mark added.
+
+Pre-tokenization: the comma and the full stop became pieces of their own.
+
+Special tokens: `[CLS]` at the start of the sequence, `[SEP]` at the end.
+
+Tokenizers do not all fill these four stages the same way. The case-sensitive
+version of the same model (`bert-base-multilingual-cased`) leaves the text
+untouched in the first stage. GPT's byte-level tokenizers do no normalization
+at all. SentencePiece skips pre-tokenization.
+:::
+
+## Special tokens
 
 | token | what it is for |
 |:--|:--|
 | `[UNK]` | input with no vocabulary entry; nearly absent at byte level |
-| `[PAD]` | padding that evens up short sequences in a batch |
-| `[CLS]` | in BERT, the leading token standing for the whole sequence |
-| `[SEP]` | the boundary between two segments |
-| BOS / EOS | start and end of sequence; in generation EOS means "finished" |
+| `[PAD]` | padding that evens up short sequences in a batch; the attention mask ignores it |
+| `[CLS]` | in the BERT family, the leading token whose vector stands for the whole sequence |
+| `[SEP]` | the boundary between two segments, a question and a passage for instance |
+| BOS / EOS | start and end of sequence; in generative models EOS is how the model says it is finished |
 
 ::: {.takeaway}
-[BPE does not run on the whole raw string]{.hl} — it runs at stage 3, inside each piece.
+The spellings differ by model — `<s>`, `</s>`, `<|endoftext|>` do these jobs. [Special tokens take their share of the context window too.]{.hl}
 :::
 
 ::: {.notes}
-This slide closes two student questions at once: "does BPE eat the whole
-string?" and "what are those square-bracket things in the tokenizer output?"
+This slide closes a question students often ask: "what are those
+square-bracket things in the tokenizer output?"
 
-What you delete at stage 1 you cannot get back; Unicode normalization lives
-here, the same place as the NFC/NFD example from earlier.
-
-The spellings differ by model — `<s>`, `</s>`, `<|endoftext|>` do these jobs.
-Worth reminding the class that special tokens take their share of the context
-window too, so count them when you count tokens.
+The `[CLS]` and `[SEP]` on the previous slide are what the fourth stage adds.
+Count them when you count tokens; they take their share of the window.
 :::
 
 ## Intuition check · characters {.question}
@@ -403,7 +607,7 @@ guess. The quadratic cost is Chapter 7's (Transformers and Attention).
 | | Characters | Subwords (BPE, WordPiece, Unigram) | Whole words |
 |:--|:--|:--|:--|
 | **Vocabulary size** | [~100 for ASCII; 256 in bytes]{.pro} | 30k–100k | [Unbounded — it never closes]{.con} |
-| **Out-of-vocabulary** | [Cannot arise if the character set is closed — guaranteed only in bytes]{.pro} | [Rare — falls back to shorter pieces, given character coverage or byte fallback]{.pro} | [Constant, and worst for the words you care about]{.con} |
+| **Out-of-vocabulary** | [Cannot arise if the character set is closed — guaranteed only in bytes]{.pro} | [Rare — cut into shorter pieces, provided the vocabulary covers every character or has a byte fallback]{.pro} | [Constant, and worst for the words you care about]{.con} |
 | **Sequence length** | [5–10× longer: slower and more expensive]{.con} | [Moderate]{.pro} | [Shortest]{.pro} |
 | **Meaning per unit** | [Almost none — `p` means nothing]{.con} | Partial; often morpheme-like | [A whole unit of meaning]{.pro} |
 | **Morphologically rich languages** | Handles them, expensively | [Well — it recovered Turkish suffixes]{.pro} | [Fails badly]{.con} |
@@ -419,44 +623,15 @@ whole design problem is that the two ends fail in opposite directions.
 
 Two details from the chapter's full table. Character vocabularies run to tens of
 thousands for multilingual Unicode — 256 only if you work in bytes. And the
-subword out-of-vocabulary entry has a condition: WordPiece without byte or
-character fallback still emits `[UNK]`.
+subword out-of-vocabulary entry has a condition: WordPiece, which cannot spell
+an unknown character out in bytes, still emits `[UNK]`.
+
+The WordPiece and Unigram in the column heading are BPE's two relatives. The
+book explains how the three differ in Chapter 8, where it looks at BERT's
+tokenizer.
 
 That is usually how engineering compromises win — not by being best at
 anything, but by having no weakness bad enough to rule them out.
-:::
-
-## Three ways to learn the same kind of unit
-
-| | What it optimises | Direction | Ships in |
-|:--|:--|:--|:--|
-| **BPE** | merge the most *frequent* adjacent pair | bottom-up; the vocabulary grows | GPT-2/3/4, RoBERTa, Llama |
-| **WordPiece** | merge the pair that most increases corpus likelihood, roughly maximising $\frac{c(ab)}{c(a)\,c(b)}$ | bottom-up | BERT, DistilBERT, ELECTRA |
-| **Unigram LM** | start from a large candidate set; *prune* the pieces whose removal costs least likelihood, by EM | top-down; the vocabulary shrinks | T5, ALBERT, Gemma, most SentencePiece models |
-
-::: {.takeaway}
-Not settled in BPE's favour: at equal vocabulary size, [Unigram LM segments closer to morphology and pretrains better language models.]{.hl}
-:::
-
-::: {.src}
-Sennrich et al. 2016 · Schuster & Nakajima 2012 · Kudo 2018 · Bostrom & Durrett 2020
-:::
-
-::: {.notes}
-They differ in *what they optimise* rather than in what they produce. Knowing
-which one a model uses is how you predict its splits.
-
-Two consequences worth carrying. First, WordPiece's ratio penalises pairs whose
-parts are already common on their own, so it keeps more morpheme-like units than
-raw frequency does. Second, Unigram LM is the only one that assigns a
-*probability* to each segmentation rather than one deterministic answer, which
-makes subword regularisation possible: sample a different segmentation each
-epoch and the model stops overfitting to one arbitrary split (Kudo 2018).
-
-SentencePiece (Kudo & Richardson 2018) is a *toolkit* that implements BPE and
-Unigram LM, not a fourth algorithm. Its contribution is treating the raw string,
-spaces included, as the input — which is why its tokens carry a `▁` where a
-space was.
 :::
 
 ## Zipf's law: ten words are a fifth of the corpus
