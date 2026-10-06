@@ -472,7 +472,6 @@ metinleriyle tekrarlıyor.
 
 - *from our houses*: üç İngilizce kelime, üç token. [Daha iyi dilbilim, daha kötü fatura.]{.hl}
 - Bölünmeler dört sınırın üçünde gerçek morfolojiyle örtüşüyor. Çekince `im|iz`: *-imiz* tek bir biçimbirim
-- `o200k_base` aynı kelimeyi `ev|ler|imiz|den` diye bölüyor: kesim dile değil, birleştirme tablosuna bağlı
 
 ::: {.takeaway}
 Türkçe metni tokenizer'a vermeden önce tek biçime getirin: `unicodedata.normalize("NFC", text)`
@@ -488,7 +487,8 @@ gerçek morfolojiyle örtüşüyor: *ev*, *-ler* (çoğul), *-den* (ayrılma hâ
 Türkçe dilbilgisinin tek bir kuralını vermedi. Çekince `im|iz`de: *-imiz*
 (iyelik) tek bir biçimbirim ve BPE onu ikiye bölmüş; çünkü `im` ile `iz` tek
 başlarına da sık geçiyor. Sıklık morfoloji için iyi bir vekil, ama onun yerine
-geçmez.
+geçmez. Daha yeni `o200k_base` aynı kelimeyi `ev|ler|imiz|den` diye bölüyor; yani
+kesim dile değil, birleştirme tablosuna bağlı.
 
 Kutudaki NFC satırı için tek cümle yeter: `ö` gibi işaretli bir harf
 bilgisayarda iki farklı biçimde saklanabilir (tek kod noktası ya da `o` artı

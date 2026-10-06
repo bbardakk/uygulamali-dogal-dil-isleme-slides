@@ -449,7 +449,6 @@ on their own text in Exercise 1.
 
 - *from our houses*: three English words, three tokens. [Better linguistics, worse bill.]{.hl}
 - The splits match the real morphology at three of four boundaries. The asterisk is `im|iz`: *-imiz* ("our") is a single morpheme
-- `o200k_base` cuts the same word as `ev|ler|imiz|den`: the cut depends on the merge table, not on the language
 
 ::: {.takeaway}
 Bring Turkish text into one form before it reaches the tokenizer: `unicodedata.normalize("NFC", text)`
@@ -465,7 +464,9 @@ real morphology at three of its four boundaries — *ev* (house), *-ler*
 (plural), *-den* (from) — and nobody supplied a rule of Turkish grammar. The
 asterisk is `im|iz`: *-imiz* ("our") is a single morpheme that BPE cut in half,
 because `im` and `iz` are each frequent on their own. Frequency is a good proxy
-for morphology, not a substitute.
+for morphology, not a substitute. The newer `o200k_base` cuts the same word as
+`ev|ler|imiz|den`, so where the cut falls depends on the merge table, not on
+the language.
 
 One sentence is enough for the NFC line in the takeaway: a letter with a mark,
 such as `ö`, can be stored in two different ways (one code point, or `o` plus a
