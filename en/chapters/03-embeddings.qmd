@@ -65,6 +65,31 @@ low-rank constraint, which is a form of partial pooling. Words that behave alike
 are forced to share parameters, and that sharing *is* the generalisation.
 :::
 
+## Three kinds of embedding, one chapter
+
+| Kind | Example | Same vector for the same word everywhere? |
+|:--|:--|:--|
+| **Static word embedding** | word2vec, GloVe, fastText | Yes — one vector per word form |
+| **Contextual token embedding** | BERT | No — the vector is computed from the sentence |
+| **Sentence / document embedding** | SBERT and its relatives | One vector for the whole sentence or document |
+
+::: {.takeaway}
+[This chapter is about static embeddings.]{.hl} Contextual ones belong to Chapter 7, sentence- and document-level ones to Chapter 19.
+:::
+
+::: {.notes}
+"Embedding" is used for three different things; separate them in the first five
+minutes so students build the map of the chapter early. When we reach the limits
+of static embeddings at the end we come back to this table: the "Yes" in the first
+row is exactly the constraint that has to be lifted.
+
+The reading advice fits here too. On a first read the spine is: the distributional
+hypothesis → co-occurrence → word2vec → cosine → GloVe and fastText → the limits
+of static embeddings. Second read (deep dive): the mathematics of PPMI and SVD,
+the gradient of negative sampling, the SGNS–PMI relationship, and the anisotropy
+and bias measurements.
+:::
+
 ## The distributional hypothesis
 
 ::: {.lede}
@@ -404,18 +429,19 @@ always.
 
 ## From counting to predicting
 
-- Why abandon counting? Not accuracy. The matrix is vocabulary × vocabulary: ten billion *possible* cells at 100,000 words — one monolithic artifact to build before you can factorize
-- word2vec (Mikolov et al. 2013): never build the matrix. Train a classifier to *predict* context, then throw the classifier away and keep its weights
+- Why were predictive methods adopted so quickly? One of the main reasons is scale. The matrix is vocabulary × vocabulary: ten billion *possible* cells at 100,000 words — one monolithic artifact to build before you can factorize
+- word2vec (Mikolov et al. 2013): never build the matrix. Train a classifier to *predict* context, then use the weights it learned rather than its predictions
 - A shallow network: one-hot input → hidden layer = the row of $\mathbf{W}$ for that word, a lookup with no activation → output $\mathbf{W}'$ scores candidate words
-- When training ends, $\mathbf{W}'$ is discarded and $\mathbf{W}$ kept: one row per word
+- In classic use it is mostly $\mathbf{W}$ that is kept: one row per word. Not a requirement — some approaches add the two matrices
 
 ::: {.takeaway}
-[The product is not the network you train; it is the weights of its first layer.]{.hl} The embedding table at the bottom of a transformer (Ch. 7) is literally the same object.
+[The product is not the network you train; it is the weights of its first layer.]{.hl} The embedding table at the bottom of a transformer (Ch. 7) is the same kind of object.
 :::
 
 ::: {.notes}
-So counting works: royalty landed on one side and food on the other. Why did the
-field move on? One reason, and it is not accuracy. Sparse storage keeps only
+So counting works: royalty landed on one side and food on the other. The field
+did not drop counting — GloVe is the evidence — but predictive methods were
+adopted quickly, and one of the main reasons was scale. Sparse storage keeps only
 the non-zeros, but the co-occurrence matrix is still one monolithic artifact you
 have to build before you can factorize anything. The alternative is to never
 build it, and learn the vectors by asking the model to predict.
@@ -432,8 +458,9 @@ The model was a pretext; the weights were the point. 300 numbers per row in the
 usual setting.
 
 Two matrices are learned: v for words as centres, u for words as contexts.
-Almost everyone keeps v and discards u. Adding them sometimes helps a little;
-GloVe's authors recommend it (Pennington et al. 2014).
+In classic word2vec use it is mostly v that is kept and u that is set aside — a
+common choice, not a requirement. Some approaches use the output matrix, or the sum
+or average of the two; GloVe's authors recommend adding them (Pennington et al. 2014).
 :::
 
 ## CBOW and skip-gram: arrows reversed
@@ -465,7 +492,7 @@ One window of *the pump failed during the night shift*: centre `failed`, width 2
 ::::
 
 ::: {.takeaway}
-Both learn $\mathbf{W}$ (word → vector) and $\mathbf{W}'$ (scores partners), and both throw $\mathbf{W}'$ away. [Skip-gram is the variant that won]{.hl}; the rest of the chapter uses it.
+Both learn $\mathbf{W}$ (word → vector) and $\mathbf{W}'$ (scores partners); the pretrained vectors you download are mostly the rows of $\mathbf{W}$. [Skip-gram is the variant that won]{.hl}; the rest of the chapter uses it.
 :::
 
 ::: {.notes}
@@ -568,8 +595,10 @@ Holding the context vectors fixed, the gradient for v is the sum of both terms:
 is what `gv` in the training code computes in one einsum.
 
 These are tiny movements. Multiply them by tens of billions of pairs and you get
-the geometry that made these models famous: no cleverness, just an enormous
-number of very small corrections.
+the geometry that made these models famous. Do not let students conclude "word2vec
+is plain SGD and the rest does not matter": one update is simple, but quality is
+largely decided by which pairs are shown, how often and against what — negative
+sampling, subsampling, the noise distribution and the context window. Two slides on.
 :::
 
 ## Only seven rows move
@@ -584,9 +613,14 @@ $$\frac{\partial \mathcal{L}}{\partial \mathbf{v}_w} = \bigl(\sigma(z) - y\bigr)
 ::: {.notes}
 The derivation, for students who want to see it fall out. Write z = v·u. The
 sigmoid has a tidy derivative, σ′(z) = σ(z)(1 − σ(z)). Differentiate −log σ(z)
-with the chain rule: −σ′(z)/σ(z) = σ(z) − 1. The σ(z) cancels, which is the
-whole reason log loss is paired with the sigmoid rather than, say, squared
-error. For a negative sample the term is −log σ(−z) and the same two lines give
+with the chain rule: −σ′(z)/σ(z) = σ(z) − 1. The σ(z) cancels. A pleasant
+property, but not the main reason for the pairing. The main reason is probability:
+every pair is a yes/no question ("is it real?"), a Bernoulli trial, and the model
+gives the probability of yes as p = σ(z). The probability the model gave to the
+observed answer (the likelihood) is p if y = 1 and 1 − p if y = 0. Its negative
+logarithm, −[y log p + (1 − y) log(1 − p)], is the log loss itself. So making the
+loss small is the same job as making the data's likelihood large; the simple
+gradient is a gift of that. For a negative sample the term is −log σ(−z) and the same two lines give
 σ(z). Both collapse into σ(z) − y. One more chain-rule step, since ∂z/∂v = u,
 gives the two gradients on the slide.
 
@@ -606,7 +640,40 @@ of this fact. And a word learns only as much as it occurs or gets drawn as a
 negative — another way to read why the 0.75 exponent on the next slide matters.
 :::
 
-## Two details that matter more than the architecture
+## Four training choices that decide how well word2vec works {.smaller}
+
+| choice | what it sets | typical value | effect |
+|:--|:--|:--|:--|
+| **Negative sampling** ($K$) | fake pairs drawn per real pair | small corpus 5–20, large 2–5 | vocabulary-wide softmax → a cheap yes/no question |
+| **Context window** | how many neighbours count as "context" | 5; shrunk at random to 1–5 per centre | narrow → syntactic, wide → topical similarity |
+| **Subsampling** ($t$) | how much of the frequent words is discarded | $t \approx 10^{-3}$ | `the` does not swamp training |
+| **Noise distribution** | where fake words are drawn from | $f(w)^{0.75}$ | rare words get training signal too |
+
+::: {.takeaway}
+The update itself is simple. [What decides quality: which pairs you show, how often, and against what.]{.hl}
+:::
+
+::: {.notes}
+This slide corrects the "word2vec = plain SGD" conclusion. Each of the four
+choices answers part of the same question.
+
+Negative sampling and K: with a very small K the model sees too few "not this one"
+examples; a large K makes every step more expensive. The original paper suggests
+5–20 for small corpora and 2–5 for large ones (Mikolov et al. 2013) — with plenty
+of data every word already gets many updates.
+
+Context window: a narrow window (1–2) sees only the immediately adjacent words;
+what sits right next to a word is mostly a grammatical neighbour, so words doing
+the same job end up close. A wide window (5–10) sees the same sentence, even the
+same paragraph; words on the same topic end up close. word2vec also does not keep
+the window fixed: for each centre it draws the effective width at random between 1
+and the maximum, so near neighbours produce pairs more often — an implicit
+weighting by distance. Exercise 1 checks this by hand in the counting method.
+
+Subsampling and the noise distribution get their numbers on the next slide.
+:::
+
+## Two of the choices, in numbers: subsampling and the 0.75 exponent
 
 :::: {.columns}
 
@@ -839,9 +906,24 @@ Pennington et al. 2014
 ::: {.notes}
 If counting and predicting are the same thing underneath: could you do the
 counting explicitly and still get the benefits of gradient descent? GloVe took
-that synthesis seriously. Build the global co-occurrence matrix, then fit vectors
-so that dot products reproduce log co-occurrence counts, weighting rare pairs
-down.
+that synthesis seriously.
+
+Unpack the slogan in two halves. "Counting": co-occurrence counts, meaning how
+many times two words fall inside each other's window — in our toy corpus `king`
+and `the` four times, `apple` and `sweet` once. "With a loss function": look for a
+vector per word such that the dot product of two vectors comes out as close as
+possible to the log count of that pair. The measure of "close" is least squares:
+add up the squared differences between prediction and observation and make the
+total small — what you do when fitting a line to points in a linear regression.
+The formal sentence: GloVe factorizes co-occurrence counts accumulated from local
+windows across the whole corpus, using a weighted least-squares objective.
+
+Correct the common wrong intuition: GloVe uses "global statistics", but that table
+is gathered from the same local windows word2vec sees. The difference is not
+whether windows are used but when the learning happens: word2vec sees examples one
+at a time and updates on each; GloVe counts and totals them all first, then
+optimises against the totals. The original paper presents the method as a
+combination of global matrix factorization and local context-window methods.
 
 Why log X: a few pairs occur millions of times, most once. Fitting raw counts
 would make the loss entirely about `of the`.
@@ -1211,7 +1293,7 @@ Word order is Chapter 6 (Language Models) and Chapter 7 (Transformers and
 Attention).
 :::
 
-## Cosine measures relatedness, not similarity
+## In this space, cosine reflects relatedness more than similarity
 
 :::: {.columns}
 
@@ -1229,22 +1311,27 @@ Attention).
 :::
 
 ::: {.column width="58%"}
-- A pair of exact antonyms is *more* similar than two related animals
-- Not a bug in GloVe: antonyms are perfectly substitutable — *sales increased sharply*, *sales decreased sharply* — so they keep identical company
+- A pair of exact antonyms is as similar as two related animals — the **antonym problem**: words with opposite meanings sit close, not far apart
+- Not a bug in GloVe: the model sees a word's *surroundings*, not its meaning. `hot` and `cold` appear next to the same words — same circle of friends, close vectors
 - The embedding encodes *relatedness*; similarity and oppositeness are both kinds of it
 :::
 
 ::::
 
 ::: {.takeaway}
-[Never build a sentiment or polarity feature out of raw cosine between static word vectors.]{.hl}
+[Do not read raw cosine between static word vectors directly as a sentiment or polarity measure.]{.hl} A supervised signal improves this; it does not solve it at the root.
 :::
 
 ::: {.notes}
 Static embeddings are useful, and weirder than the tutorials admit. Three defects
 students should be able to name; this is the first.
 
-This is the distributional hypothesis doing exactly what it promised.
+This is the distributional hypothesis doing exactly what it promised. State the
+practical cost of the antonym problem: a system searching for "hot" may return
+documents containing "cold" among its most similar results. A task-specific
+supervised signal, such as labels showing which sentence pairs contradict each
+other, can improve the distinction; but for every pair the labels did not touch,
+the underlying tendency of the distributional representation remains.
 
 A stronger version of the warning, not about static vectors at all: Steck,
 Ekanadham and Kallus (2024) show that for a family of learned embedding models,
@@ -1279,18 +1366,26 @@ numbers shortly.
 :::
 
 ::: {.column width="54%" .compact}
-- Isotropic null: mean cosine 0, variance $1/d$ — angles concentrate near 90°
+- **Isotropic** = the same in every direction: arrows spread evenly like a hedgehog's spines, two random arrows average cosine 0. **Anisotropic** = arrows lean the same way, so even random pairs are somewhat alike
 - Mean cosine and mean-vector norm are one number: $(4000 \times 0.171^2 - 1)/3999 = 0.029$
-- A shared component of measurable size: [tilted off centre, not crammed into a narrow cone]{.hl}
-- Fix: subtract the mean, perhaps the top principal components too — one line (Mu & Viswanath 2018)
+- A shared dominant direction that many vectors project onto strongly: [the zero point of cosine moves]{.hl}
+- Mitigation (not a cure): subtract the mean, perhaps the top principal components (Mu & Viswanath 2018) — sometimes information goes too, so measure on your task
 - BERT and GPT-2 are *more* anisotropic than static vectors (Ethayarajh 2019)
 :::
 
 ::::
 
 ::: {.notes}
-If embeddings used their space well, two random words would sit at a mean cosine
-of zero. Be precise about the null, because the obvious phrasing is wrong: for
+Explain the word first; most students are hearing "anisotropy" for the first
+time. Have them picture every vector as an arrow leaving a common centre. In an
+isotropic space the arrows spread evenly in all directions, like a hedgehog's
+spines. In an anisotropic one most lean the same way — stalks of wheat bent by the
+wind. Why it matters: the zero point of cosine moves; a cosine of 0.3 means
+"related" in an isotropic space and can be an ordinary value for unrelated pairs
+here. Do not say "every vector has the same component" — it is a tendency, not a
+rule that holds vector by vector.
+
+Be precise about the null, because the obvious phrasing is wrong: for
 independent unit vectors drawn uniformly in d dimensions the angles do not spread
 evenly; they concentrate near 90°, with mean cosine 0 and variance 1/d. Isotropy
 means no direction is special, not that every angle is equally likely.
@@ -1328,6 +1423,15 @@ Before shipping anything built on pretrained vectors, [read the neighbours of yo
 :::
 
 ::: {.notes}
+Give the norm-versus-direction distinction here; this slide is the answer to "why
+cosine and not Euclidean?" A vector has two properties: direction and length. The
+norms in the table partly carry frequency information — frequent words' vectors are
+longer on average. Meaning sits mostly in the direction. Cosine looks only at
+direction; Euclidean distance mixes the two and can put two words far apart merely
+because one is frequent and one rare. Normalise to unit length and the gap closes:
+‖a − b‖² = 2 − 2cos(a, b), so the two measures give the same ranking (the identity
+from Chapter 2).
+
 Mean vector norm by frequency rank: 0–100: 6.19; 100–1,000: 5.85; 1,000–10,000:
 5.45; 10,000–100,000: 4.99; 100,000–400,000: 3.62. Spearman(log rank, norm) over
 the top 100k words: −0.313. Norm falls monotonically with rarity. Cosine ignores
@@ -1344,6 +1448,61 @@ The chapter calls this the single most important practical point in the chapter
 for engineers: pretrained embeddings are excellent for words Wikipedia discusses
 often and unreliable for the vocabulary that defines your problem. It is much
 cheaper to learn this now than after deployment.
+:::
+
+## Coordinates mean nothing on their own, and runs do not agree
+
+:::: {.columns}
+
+::: {.column width="50%"}
+Same corpus, same settings, two seeds (`text8`, 6,794,527 tokens)
+
+::: {.roomy}
+| measurement | value |
+|:--|--:|
+| same word, raw coordinates: mean cosine | −0.016 |
+| after aligning with a single rotation | +0.951 |
+| top-10 neighbour overlap, 1,000 most frequent words | 62.2% |
+| top-10 neighbour overlap, 1,000 rarest words | 46.6% |
+| largest change in any cosine after a random rotation | 5.5 × 10⁻⁷ |
+:::
+:::
+
+::: {.column width="50%" .compact}
+- $ER$ instead of $E$ (orthogonal $R$): [every coordinate changes, no cosine does]{.hl}
+- A reading like "dimension 37 = animal-ness" cannot be made in general; meaning is in angles and distances
+- Coordinates from two runs cannot be compared directly — align first (Procrustes)
+- Training is stochastic: the overall shape is stable, the fine neighbour ordering is not — less so for rare words
+:::
+
+::::
+
+::: {.takeaway}
+Same corpus + different seed → geometrically different, functionally similar spaces. Do not build an argument on one neighbour list from one run.
+:::
+
+::: {.notes}
+These are not defects, but embedding geometry gets misread without them. The
+numbers are the chapter's measurement: word2vec trained twice on the same text8
+slice with the same settings, changing only the seed (gensim 4.4, vocabulary
+18,677).
+
+Rotation: multiply every vector by the same random orthogonal matrix; every
+coordinate of `king` changes and the `king`–`queen` cosine stays at 0.6826.
+Rotating a space does not change the angles between its arrows. The training
+objective looks only at dot products, so it has no preference among the infinitely
+many rotated copies; the coordinate system you hold is an arbitrary one of them.
+
+Two runs: the mean cosine between the same word's raw coordinates is −0.016 — as
+unrelated as two random vectors. Align with a single rotation and it is +0.951. So
+the two runs learned almost the same shape and wrote it in different coordinate
+systems. The practical rule: align embeddings trained at different times or on
+different corpora before comparing them — "did this word's meaning drift over the
+years?" is exactly that question.
+
+Stability: even for the most frequent words, four of ten neighbours differ between
+the two runs; for the rarest, more than half. If a neighbourhood matters, train
+with a few seeds and see which neighbours come back every time.
 :::
 
 ## Bias is in the data, and the geometry records it
@@ -1548,7 +1707,7 @@ then.
 - **Retrieval, everywhere** — every vector database and RAG pipeline (Ch. 20) runs this idea, with contextual vectors instead of static ones
 
 ::: {.takeaway}
-[Embeddings are how you make discrete things differentiable.]{.hl} That is why the idea outlived the specific models.
+[An embedding layer maps discrete identities to continuous, learnable vectors usable in optimisation.]{.hl} The discrete object itself does not become differentiable; the gradient flows to its vector.
 :::
 
 ::: {.notes}
@@ -1567,13 +1726,13 @@ routing. Retrieval: text as coordinates, compared by cosine — Chapter 20
 
 ## What static embeddings cannot do {.smaller}
 
-| limitation                   | evidence from this chapter                          | fixed by                        |
+| limitation                   | evidence from this chapter                          | common way to address or mitigate |
 |:-------------------------|:---------------------------------------------|:-----------------------------|
 | One vector per word form     | `python` blends Monty, PHP and the snake            | contextual embeddings (Ch. 7)   |
 | No word order                | *pump failed / valve fine* = its reverse            | sequence models (Ch. 6)         |
-| Out-of-vocabulary words      | word2vec `KeyError`; 7.3% of Turkish tokens         | subwords (fastText, BPE)        |
-| Antonyms look like synonyms  | `increase`/`decrease` at 0.881                      | task-supervised fine-tuning     |
-| Anisotropic geometry         | mean cosine 0.029 against 0 under isotropy          | mean removal, whitening         |
+| Out-of-vocabulary words      | word2vec `KeyError`; on the Turkish Wikipedia sample (90% train / 10% test) 7.3% of test tokens | character n-grams (fastText) or subword tokens (BPE, WordPiece) |
+| Antonyms look like synonyms (the antonym problem) | `increase`/`decrease` at 0.881 | can be *improved* with a supervised signal; the tendency remains |
+| Anisotropic geometry         | mean cosine 0.029 against 0 under isotropy          | mean removal, whitening — they reduce it and sometimes take information too |
 | Rare words collapse          | `eutectic` → `tiwai`                                | domain adaptation, subwords     |
 | Bias from the corpus         | `homemaker` +0.363 on the woman axis                | no clean fix: measure, document |
 
@@ -1585,9 +1744,10 @@ A static embedding is a lookup table: one output per input. [To give `bank` a di
 Collecting the failures we accumulated, because together they are the
 specification for the next part of the book.
 
-The first two are the important ones, and they have the same root cause: a
-static embedding is a function from word form to vector, and a function has one
-output per input. The representation has to be computed from the sentence rather
+The first two are the important ones, but they do not share a root cause. The
+first follows from this: a static embedding is a function from word form to
+vector, and a function has one output per input. The second is a composition
+problem — word order is about how you combine vectors into a sentence vector. The representation has to be computed from the sentence rather
 than looked up — which is what Chapter 7 does, and why an LLM's contextual
 vectors are computed from the sentence each time rather than stored per word.
 
