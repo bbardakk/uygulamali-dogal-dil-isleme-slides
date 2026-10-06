@@ -33,7 +33,7 @@ Bölümdeki her sayı, gösterilen kodun scikit-learn 1.9 ve tiktoken 0.13 ile
 ## Problem, tek cümlede
 
 ::: {.lede}
-Model, sayılar üzerinde aritmetik yapan bir fonksiyondur. Bakım kaydı ise bir karakter dizisidir.
+Model, sayılar üzerinde aritmetik yapan bir fonksiyondur. Metin ise bir karakter dizisidir.
 :::
 
 Aradaki köprünün tam olarak iki ayağı var:

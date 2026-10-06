@@ -33,7 +33,7 @@ scikit-learn 1.9 and tiktoken 0.13.
 ## The problem, in one sentence
 
 ::: {.lede}
-A model is a function that does arithmetic on numbers. A maintenance log is a string of characters.
+A model is a function that does arithmetic on numbers. Text is a string of characters.
 :::
 
 The bridge between them has exactly two spans:
