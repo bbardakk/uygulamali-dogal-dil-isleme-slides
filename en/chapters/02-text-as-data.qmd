@@ -414,12 +414,12 @@ Article 1 of the Universal Declaration of Human Rights, official English and Tur
 ::: {.roomy}
 | Tokenizer | English | Turkish | Turkish/English token ratio |
 |:--|:--|:--|:--|
-| `cl100k_base` (GPT-3.5/4) | 170 code points → 33 tokens · 5.15 code points/token | 160 code points → 60 tokens · 2.67 code points/token | **1.82** |
-| `o200k_base` | 170 code points → 33 tokens · 5.15 code points/token | 160 code points → 46 tokens · 3.48 code points/token | **1.39** |
+| `cl100k_base` (GPT-3.5/4) | 170 code points → 33 tokens · 5.15 per token | 160 code points → 60 tokens · 2.67 per token | **1.82** |
+| `o200k_base` | 170 code points → 33 tokens · 5.15 per token | 160 code points → 46 tokens · 3.48 per token | **1.39** |
 :::
 
 ::: {.takeaway}
-APIs bill per token and context windows are measured in tokens: [on this text Turkish takes more tokens for the same content.]{.hl} The ratio depends on the tokenizer and on the text; one paragraph does not give a general ratio.
+APIs bill per token and context windows are measured in tokens: [on this text Turkish takes more tokens for the same content.]{.hl} The ratio depends on the tokenizer and on the text.
 :::
 
 ::: {.src}
@@ -782,15 +782,15 @@ chapter does not estimate those parameters.
 ## A regression slope is not a reliable Zipf exponent
 
 ::: {.lede}
-Fitting a straight line by least squares to a log-log rank–frequency plot can describe the shape of a distribution. The slope alone is neither a reliable power-law estimate nor evidence of fit:
+A least-squares line on a log-log rank–frequency plot can describe the shape of a distribution; the slope alone is neither a reliable power-law estimate nor evidence of fit:
 :::
 
-1. The **range** chosen for the fit and the **weighting** of the points change the slope; the many rare types dominate an unweighted fit
+1. The **range** of the fit and the **weighting** of the points change the slope; rare types dominate an unweighted fit
 2. Ranked frequencies are **not independent observations**; the uncertainty calculations of a simple regression can mislead
 3. Estimating the coefficient, its standard error, and whether a power law is **an appropriate model at all** are three separate questions
 
 ::: {.takeaway}
-The approach of Clauset and colleagues: maximum likelihood with a lower cutoff $x_{\min}$ estimated from the data; the fit is judged by comparing a Kolmogorov–Smirnov distance with synthetic samples — [not by an $R^2$.]{.hl}
+Clauset et al.: maximum likelihood with a lower cutoff $x_{\min}$; the fit is judged by comparing a Kolmogorov–Smirnov distance with synthetic samples — [not by an $R^2$.]{.hl}
 :::
 
 ::: {.src}
@@ -863,7 +863,7 @@ occurrences of `'ax` — the **second** most frequent token, ahead of *to*, *a* 
 
 ::: {.column width="64%"}
 - Not a word of natural language: all of its occurrences sit in 13 of 11,314 documents
-- Twelve of them are parts of a fourteen-part posting of a file called `roman.bmp`: file content encoded as text (uuencode)
+- Twelve of them are parts of a fourteen-part posting of `roman.bmp`: file content encoded as text (uuencode)
 - The largest single document contributes 11,147 of the 62,043; `'ax` is in only 0.1% of documents
 - The apostrophe is in the raw data; `[a-z']+` keeps it in the token. Under the default `token_pattern`, `ax` is still second (62,387)
 :::

@@ -105,10 +105,10 @@ aldığında saydığı şey budur.
 
 | İşlem | [Olası yararı]{.pro} | [Olası kaybı veya maliyeti]{.con} | Kullanım önerisi |
 |:--|:--|:--|:--|
-| **Küçük harfe çevirme** | `Pompa` = `pompa`: iki sütun birleşir, sayımları toplanır | `AŞ` ile `aş` aynılaşır; `str.lower()` Türkçeye özgü `I`–`ı`, `İ`–`i` eşlemelerini uygulamaz | Dile ve göreve göre karar verin; ön eğitimli modelde modelin kendi kurallarını izleyin |
+| **Küçük harfe çevirme** | `Pompa` = `pompa`: iki sütun birleşir, sayımları toplanır | `AŞ` ile `aş` aynılaşır; `str.lower()` Türkçeye özgü `I`–`ı`, `İ`–`i` eşlemelerini uygulamaz | Dile ve göreve göre karar verin; ön eğitimli modelde modelin kurallarını izleyin |
 | **Noktalama çıkarma** | `arızalandı;` = `arızalandı` | `P-101` gibi tanımlayıcıları, ondalıkları, URL'leri değiştirebilir | Toplu silmeyin; hangi işaretin korunacağını göreve göre seçin |
 | **Stop word çıkarma** | Listedeki kelimeleri sayım dışında bırakır: burada token'ların %43,9'u | Listede `not` varsa olumsuzluk bilgisi kaybolabilir | Seyrek sayım modellerinde etkisini ölçün; listeyi okuyun |
-| **Gövdeleme** (stemming) | `kitaplarımızdan` → `kitap`: biçimleri ortak bir çıktıda toplayabilir | Farklı kelimeleri birleştirebilir (`university`, `universe` → `univers`) ya da aynı kelimenin biçimlerini ayrı bırakabilir | Sözcüksel arama ve seyrek modellerde deneyin; çıktılara bakın |
+| **Gövdeleme** (stemming) | `kitaplarımızdan` → `kitap`: biçimleri ortak bir çıktıda toplayabilir | Farklı kelimeleri birleştirebilir: `university`, `universe` → `univers` | Sözcüksel arama ve seyrek modellerde deneyin; çıktılara bakın |
 | **Lemmatizasyon** (lemmatization) | `gidiyorum` → `gitmek`: sözlük biçimiyle eşleştirmeyi amaçlar | Sözlük, kural ya da bağlam gerektirebilir; belirsiz biçimlerde hata yapabilir | Ön eğitimli modele eklemeyin; seyrek modellerde yararını ölçün |
 
 ::: {.takeaway}
@@ -426,12 +426,12 @@ Deneyin kodu bölümde; on beş satır.
 ::: {.roomy}
 | Tokenizer | İngilizce | Türkçe | Türkçe/İngilizce token oranı |
 |:--|:--|:--|:--|
-| `cl100k_base` (GPT-3.5/4) | 170 kod noktası → 33 token · token başına 5,15 kod noktası | 160 kod noktası → 60 token · token başına 2,67 kod noktası | **1,82** |
-| `o200k_base` | 170 kod noktası → 33 token · token başına 5,15 kod noktası | 160 kod noktası → 46 token · token başına 3,48 kod noktası | **1,39** |
+| `cl100k_base` (GPT-3.5/4) | 170 kod noktası → 33 token · token başına 5,15 | 160 kod noktası → 60 token · token başına 2,67 | **1,82** |
+| `o200k_base` | 170 kod noktası → 33 token · token başına 5,15 | 160 kod noktası → 46 token · token başına 3,48 | **1,39** |
 :::
 
 ::: {.takeaway}
-API'ler token başına ücretlendirir, bağlam pencereleri token cinsinden ölçülür: [bu metinde Türkçe, aynı içerik için daha çok token harcıyor.]{.hl} Oran tokenizer'a ve metne bağlı; tek bir paragraf genel bir oran vermez.
+API'ler token başına ücretlendirir, bağlam pencereleri token cinsinden ölçülür: [bu metinde Türkçe, aynı içerik için daha çok token harcıyor.]{.hl} Oran tokenizer'a ve metne bağlı.
 :::
 
 ::: {.src}
@@ -798,15 +798,15 @@ fazla esneklik tanır; bölüm bu parametreleri kestirmiyor.
 ## Regresyon eğimi güvenilir bir Zipf üssü değildir
 
 ::: {.lede}
-Log-log sıra–frekans grafiğine en küçük karelerle bir doğru uydurmak dağılımın biçimini betimleyebilir. Eğim ise tek başına güvenilir bir kuvvet yasası kestirimi ya da uyum kanıtı değildir:
+Log-log grafiğe en küçük karelerle doğru uydurmak dağılımın biçimini betimleyebilir; eğim ise tek başına güvenilir bir kuvvet yasası kestirimi ya da uyum kanıtı değildir:
 :::
 
-1. Uyum için seçilen **aralık** ve noktaların **ağırlıklandırılması** eğimi değiştirir; çok sayıdaki seyrek tür ağırlıksız uyuma hâkim olur
+1. Seçilen **aralık** ve noktaların **ağırlıklandırılması** eğimi değiştirir; seyrek türler ağırlıksız uyuma hâkim olur
 2. Sıralanmış frekanslar **bağımsız gözlemler değildir**; basit regresyonun belirsizlik hesabı yanıltabilir
 3. Katsayının kestirimi, standart hatası ve kuvvet yasasının **uygun bir model olup olmadığı** üç ayrı sorudur
 
 ::: {.takeaway}
-Clauset ve arkadaşlarının yaklaşımı: veriden kestirilen bir alt kesim $x_{\min}$ ile maksimum olabilirlik; uyum, Kolmogorov–Smirnov uzaklığı sentetik örneklemlerle karşılaştırılarak değerlendirilir — [$R^2$ ile değil.]{.hl}
+Clauset vd.: alt kesim $x_{\min}$ ile maksimum olabilirlik; uyum, Kolmogorov–Smirnov uzaklığı sentetik örneklemlerle karşılaştırılarak değerlendirilir — [$R^2$ ile değil.]{.hl}
 :::
 
 ::: {.src}
@@ -1781,11 +1781,11 @@ tolerans içinde uyuşmalı.
 ## Alıştırmalar (2 / 2)
 
 ::: {.compact}
-5. **Olumsuzlama hatasını bulun.** Kendi alanınızdan, operasyonel anlamı taban tabana zıt ve TF-IDF kosinüsü 0,9'un üzerinde iki belge kurgulayın. Sonra yalnızca yüksek kosinüse bakarak iki belgenin aynı kararı ifade ettiğine hükmetmenin neden uygun olmadığını açıklayan bir tasarım incelemesi cümlesi yazın.
+5. **Olumsuzlama hatasını bulun.** Kendi alanınızdan, operasyonel anlamı taban tabana zıt ve TF-IDF kosinüsü 0,9'un üzerinde iki belge kurgulayın. Sonra yüksek kosinüsün tek başına iki belgenin aynı kararı ifade ettiğini neden göstermediğini açıklayan bir tasarım incelemesi cümlesi yazın.
 6. **Kendi verinizde Zipf.** Kendi derleminizde sıraya karşı frekansı log-log ölçekte çizin. Çizgi düz görünüyor mu? İlk beş token ne — içlerinde `'ax` gibi bir artefakt var mı?
-7. **Türkçe morfoloji ve token sayısı.** Bir teknik terim seçin (`basınç`, `sıcaklık`, `dayanım`), beş çekimli biçimini belirleyin ve token sayılarını aynı tokenizer ile ölçün. Sonra Türkçe yazımı koruyan biçimlerle ASCII'ye indirgenmiş biçimleri karşılaştırın; sonucu bu örneklerle sınırlı yorumlayın.
-8. **Mülakat alıştırması.** Chip Huyen'in kitabındaki §8.2.1 beş belgelik TF-IDF sıralama problemini kâğıt kalemle çözün. Kütüphaneyle kontrol etmeden önce terim kümesini, biçim eşlemelerini (`birds → bird`) ve TF-IDF varyantını tanımlayın.
-9. **Türkçe token maliyetini çok sayıda örnekte ölçün.** Paralel bir metinden 50–100 cümle çifti toplayın; her tokenizer için çift başına Türkçe/İngilizce token oranını ve her dilde 1.000 kod noktası başına token sayısını ölçün. Medyanı ve çeyrekler arası aralığı bildirin.
+7. **Türkçe morfoloji ve token sayısı.** Bir teknik terimin (`basınç`, `sıcaklık`) beş çekimli biçimini aynı tokenizer ile sayın; sonra ASCII'ye indirgenmiş biçimlerle karşılaştırın.
+8. **Mülakat alıştırması.** Chip Huyen'in kitabındaki §8.2.1 TF-IDF sıralama problemini kâğıt kalemle çözün. Kütüphaneyle kontrol etmeden önce terim kümesini, biçim eşlemelerini (`birds → bird`) ve TF-IDF varyantını tanımlayın.
+9. **Türkçe token maliyetini çok sayıda örnekte ölçün.** Paralel bir metinden 50–100 cümle çifti toplayın; çift başına Türkçe/İngilizce token oranını ve 1.000 kod noktası başına token sayısını ölçün. Medyanı ve çeyrekler arası aralığı bildirin.
 :::
 
 ::: {.notes}
