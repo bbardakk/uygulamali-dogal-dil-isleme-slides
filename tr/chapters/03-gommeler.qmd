@@ -1046,7 +1046,7 @@ Manşetteki analoji sayısı, bir ilişkiyi ölçtüğü kadar komşuluk yapıs�
 ölçüyor; Linzen'in noktası bu. Nissim, van Noord ve van der Goot (2020) bu
 sonuçların nasıl sunulduğuna dair tamamlayıcı noktayı koyuyor.
 
-Kitaptaki gezginin sekiz analojisi (gerçek GloVe sonuçları, filtreli ve
+Kitaptaki etkileşimli aracın sekiz analojisi (gerçek GloVe sonuçları, filtreli ve
 filtresiz): king − man + woman, paris − france + italy, walking − walk + swim,
 bigger − big + small, madrid − spain + germany, windows − microsoft + google,
 mice − mouse + goose, einstein − physics + biology. Ham ilk sonuçlar:
@@ -1328,7 +1328,7 @@ Steck, Ekanadham ve Kallus (2024), öğrenilmiş bir embedding modeli ailesinde
 kosinüs benzerliğinin keyfî olabileceğini gösteriyor. Veriye eşit derecede iyi
 uyan iki düzenlileştirme tercihi, birbiriyle tutarlı hiçbir ilişkisi olmayan
 kosinüs değerleri üretiyor. Gerçekten ölçmek istediğiniz amacı eğitin ya da
-kosinüsü kendi verinizden bir taban çizgisine göre kalibre edin; 0,8'in iki
+kosinüsü kendi verinizden elde ettiğiniz bir referans dağılıma göre kalibre edin; 0,8'in iki
 modelde aynı şeyi ifade ettiğini varsaymayın.
 
 Benchmark camiası bu ayrımı bilinçli olarak kurulmuş iki veri kümesiyle
@@ -1972,7 +1972,7 @@ Bölümün sekiz alıştırması, kısaltılmış. Okunmaya değer ayrıntılar:
 | [Rong 2014](https://arxiv.org/abs/1411.2738) · [Goldberg & Levy 2014](https://arxiv.org/abs/1402.3722) | her gradyan elle; negatif örnekleme amacı dört sayfada |
 | [Levy & Goldberg 2014](https://papers.nips.cc/paper/5477-neural-word-embedding-as-implicit-matrix-factorization) · [Levy vd. 2015](https://aclanthology.org/Q15-1016/) | word2vec'i açıklayan iki makale |
 | [Bolukbasi vd. 2016](https://arxiv.org/abs/1607.06520), ardından [Gonen & Goldberg 2019](https://arxiv.org/abs/1903.03862) | ikili okuyun: çözüm, sonra düzeltmesi |
-| [Jurafsky & Martin, 5. bölüm](https://web.stanford.edu/~jurafsky/slp3/5.pdf) | PPMI, SVD, skip-gram ve değerlendirme, özenle; ücretsiz |
+| [Jurafsky & Martin, 5. bölüm](https://web.stanford.edu/~jurafsky/slp3/5.pdf) | Sayım temelli vektörler, SVD, skip-gram ve değerlendirme; PPMI Ek J'de; ücretsiz |
 | [Stanford CS224N](https://web.stanford.edu/class/cs224n/), 1.–2. dersler | skip-gram gradyanı; 2. ödev word2vec'i gerçekliyor |
 | [Elena Voita, NLP Course For You](https://lena-voita.github.io/nlp_course/word_embeddings.html) | skip-gram ve negatif örneklemenin en iyi görsel anlatımı |
 | [fastText pretrained vectors](https://fasttext.cc/docs/en/crawl-vectors.html) | Türkçe dahil 157 dil; buradan başlayın |

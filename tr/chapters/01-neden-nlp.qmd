@@ -579,8 +579,8 @@ Beş görev ailesi neredeyse her şeyi kapsıyor; değerlendirme beşini de kese
 Beş görev ailesi: sınıflandırma, erişim (retrieval), çıkarım, üretim ve ajanlar.
 Değerlendirme altıncı bir aile değil; beşinin de üstünde duran bir katman —
 hangi aileye girerseniz girin, hata oranını sayıyla ifade edene kadar elinizde
-bir sonuç yok. Tabloda ayrı bir satır olarak duruyor ama sınıfta bunu söyleyin. Kitaptaki etkileşimli gezginde öğrenciler kendi alanlarını
-seçebiliyor. Bu tablo her aile için oradan bir örnek alıyor ve gezginin
+bir sonuç yok. Tabloda ayrı bir satır olarak duruyor ama sınıfta bunu söyleyin. Kitaptaki etkileşimli araçta öğrenciler kendi alanlarını
+seçebiliyor. Bu tablo her aile için oradan bir örnek alıyor ve aracın
 gösterdiği bölümü veriyor (17 Prompting, 20 RAG, 8 LLM manzarası, 23 araçlar ve
 ajanlar, 22 değerlendirme).
 
@@ -610,7 +610,7 @@ Bazı satırların tam hâli:
 :::
 
 ::: {.notes}
-Bölümdeki gezginin alan başına tam eşlemesi:
+Bölümdeki etkileşimli aracın alan başına tam eşlemesi:
 
 - Kimya ve proses mühendisliği: vardiya devir ve sapma raporları (sınıflandırma;
   sapmaları doğru sorumluya yönlendirin, tekrar eden arıza biçimlerini yüzeye
@@ -997,7 +997,7 @@ Etiketlemede olan tam olarak budur. Sonraki slayt bunu ölçüyor.
 
 $$\kappa = \frac{p_o - p_e}{1 - p_e}$$
 
-- 5. bölümdeki derlem: $p_o = 0{,}9342$, $p_e = 0{,}9099$ → taban çizgisinin üstünde 2,43 puan; kazanılabilecek yalnızca 9,01 puan içinden
+- 5. bölümdeki derlem: $p_o = 0{,}9342$, $p_e = 0{,}9099$ → şans düzeyinin üstünde 2,43 puan; kazanılabilecek yalnızca 9,01 puan içinden
 - $\kappa = 2{,}43 / 9{,}01 = \mathbf{0{,}27}$
 
 ::: {.takeaway}
@@ -1009,12 +1009,12 @@ Cohen'in kappa'sı (Cohen 1960).
 
 Sayıları bir ayrıştırma değil, bir karşılaştırma olarak okuyun: 93,42 puanlık
 gözlenen uyuşmaya karşılık, bu marjinallere sahip iki etiketleyicinin bağımsız
-etiketleyerek ulaşacağı 90,99 puan. Taban çizgisinin üstünde 2,43 puan kalıyor.
+etiketleyerek ulaşacağı 90,99 puan. Bu şans düzeyinin üstünde 2,43 puan kalıyor.
 Hangi 90,99 puanın şanstan geldiğini *söylemiyor*: $p_e$ bağımsızlık sıfır
 hipotezinin (independence null hypothesis) öngörüsü, olan bitenin ölçülebilir
 bir parçası değil.
 
-Payda da en az pay kadar önemli: $p_e$ bu kadar yüksekken taban çizgisinin
+Payda da en az pay kadar önemli: $p_e$ bu kadar yüksekken şans düzeyinin
 üstünde kazanılabilecek uyuşma yalnızca 9,01 puandı. Kappa, o boşluğun ne
 kadarını aldığınızdır.
 

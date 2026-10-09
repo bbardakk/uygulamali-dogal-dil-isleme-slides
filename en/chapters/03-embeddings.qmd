@@ -1985,7 +1985,7 @@ The chapter's eight exercises, shortened. Details worth reading out:
 | [Rong 2014](https://arxiv.org/abs/1411.2738) · [Goldberg & Levy 2014](https://arxiv.org/abs/1402.3722) | every gradient by hand; the negative-sampling objective in four pages |
 | [Levy & Goldberg 2014](https://papers.nips.cc/paper/5477-neural-word-embedding-as-implicit-matrix-factorization) · [Levy et al. 2015](https://aclanthology.org/Q15-1016/) | the two papers that explained word2vec |
 | [Bolukbasi et al. 2016](https://arxiv.org/abs/1607.06520), then [Gonen & Goldberg 2019](https://arxiv.org/abs/1903.03862) | read as a pair: the fix, then the correction |
-| [Jurafsky & Martin, Ch. 5](https://web.stanford.edu/~jurafsky/slp3/5.pdf) | PPMI, SVD, skip-gram and evaluation, with care; free |
+| [Jurafsky & Martin, Ch. 5](https://web.stanford.edu/~jurafsky/slp3/5.pdf) | Count-based vectors, SVD, skip-gram and evaluation; PPMI in Appendix J; free |
 | [Stanford CS224N](https://web.stanford.edu/class/cs224n/), lectures 1–2 | the skip-gram gradient; Assignment 2 implements word2vec |
 | [Elena Voita, NLP Course For You](https://lena-voita.github.io/nlp_course/word_embeddings.html) | the best visual explanation of skip-gram and negative sampling |
 | [fastText pretrained vectors](https://fasttext.cc/docs/en/crawl-vectors.html) | 157 languages including Turkish; start here |
