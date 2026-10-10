@@ -1417,7 +1417,7 @@ physical process is not the same as being synonymous. No general quality ranking
 can be drawn from these short lists.
 :::
 
-## Arbitrary coordinates, variable runs
+## Arbitrary coordinates, variable runs {.smaller}
 
 :::: {.columns}
 
@@ -1429,9 +1429,9 @@ Same corpus, same settings, two seeds (`text8`, 6,794,527 tokens)
 |:--|--:|
 | same word, raw coordinates: mean cosine | −0.016 |
 | after orthogonal (Procrustes) alignment | +0.951 |
-| top-10 neighbour overlap, 1,000 most frequent words | 62.2% |
-| top-10 neighbour overlap, 1,000 rarest words | 46.6% |
-| largest cosine change under a random orthogonal map | 5.5 × 10⁻⁷ |
+| top-10 neighbour overlap, 1,000 most frequent | 62.2% |
+| top-10 neighbour overlap, 1,000 rarest | 46.6% |
+| largest cosine change under an orthogonal map | 5.5 × 10⁻⁷ |
 :::
 :::
 
@@ -1571,7 +1571,7 @@ candidate answer takes place. In the analogies both the questions covered and th
 candidate vocabulary are limited.
 :::
 
-## The same dataset, different evaluated examples
+## The same dataset, different evaluated examples {.smaller}
 
 |                    | GloVe · 6 billion tokens | from scratch · 6.8 million tokens |
 |:-------------------|:-------------------------|:----------------------------------|

@@ -1394,7 +1394,7 @@ ilişkili olmak eş anlamlı olmak değildir. Bu kısa listelerden genel kalite
 sıralaması çıkarılamaz.
 :::
 
-## Keyfî koordinatlar, değişken eğitimler
+## Keyfî koordinatlar, değişken eğitimler {.smaller}
 
 :::: {.columns}
 
@@ -1406,9 +1406,9 @@ Aynı derlem, aynı ayarlar, iki seed (`text8`, 6.794.527 token)
 |:--|--:|
 | aynı kelime, ham koordinatlar: ort. kosinüs | −0,016 |
 | dik hizalamadan (Procrustes) sonra | +0,951 |
-| ilk 10 komşu örtüşmesi, en sık 1.000 kelime | %62,2 |
-| ilk 10 komşu örtüşmesi, en nadir 1.000 kelime | %46,6 |
-| rastgele dik dönüşümde en büyük kosinüs değişimi | 5,5 × 10⁻⁷ |
+| ilk 10 komşu örtüşmesi, en sık 1.000 | %62,2 |
+| ilk 10 komşu örtüşmesi, en nadir 1.000 | %46,6 |
+| dik dönüşümde en büyük kosinüs değişimi | 5,5 × 10⁻⁷ |
 :::
 :::
 
@@ -1545,7 +1545,7 @@ değerlendirmesinde bu sınırın dışındaki kelimeleri içeren çiftler atlan
 cevap araması yapılmaz. Analojide hem soru kapsamı hem aday sözlüğü sınırlanır.
 :::
 
-## Aynı veri kümesi, farklı değerlendirilen örnekler
+## Aynı veri kümesi, farklı değerlendirilen örnekler {.smaller}
 
 |                    | GloVe · 6 milyar token   | sıfırdan · 6,8 milyon token       |
 |:-------------------|:-------------------------|:----------------------------------|
