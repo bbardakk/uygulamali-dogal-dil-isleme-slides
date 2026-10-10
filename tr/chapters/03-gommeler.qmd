@@ -393,10 +393,10 @@ Bu, örtük anlamsal analizdir (latent semantic analysis; Deerwester vd. 1990).
 :::
 
 ::: {.column width="42%" .compact}
-- On cümlelik derlemde krallıkla ilgili kelimeler solda, yiyecekle ilgili kelimeler sağda
-- `man` ile `woman` benzer cümle yapılarında kullanıldıkları için bu görünümde yakın; [bağlamları birebir aynı değil]{.hl}
-- Neden 2. ve 3. boyutlar? İlk koordinat bütün kelimelerde *negatif* (−0,70 ile −2,14 arası): ortak bir yön, ama büyüklükler farklı olduğu için ayırt edici bilgiden yoksun değil
-- Uzayın yönlere eşit dağılmamasına **anizotropi** denir; ortak bir ortalama yön bunun görünümlerinden biri. İleride GloVe üzerinde ölçeceğiz
+- Krallıkla ilgili kelimeler solda, yiyecekle ilgili kelimeler sağda
+- `man` ile `woman` bu görünümde yakın; [bağlamları birebir aynı değil]{.hl}
+- İlk koordinat bütün kelimelerde *negatif* (−0,70 … −2,14): ortak bir yön; bu yüzden 2. ve 3. boyutları çiziyoruz
+- Yönlere eşit dağılmama: **anizotropi**; ileride GloVe üzerinde ölçeceğiz
 :::
 
 ::::
@@ -414,13 +414,13 @@ paylaşılan yönden gelir. Farklı iki one-hot arasında ise kosinüs her zaman
 
 ## Saymaktan tahmin etmeye
 
-- Ölçeklenebilirlik önemli bir etkendi: 100.000 kelimelik kare eş-oluşum matrisinde on milyar *olası* hücre var. Toplu PPMI–SVD akışında önce sayımlar biriktirilir, sonra matris çarpanlarına ayrılır
-- word2vec (Mikolov vd. 2013): eş-oluşum matrisini açıkça kurmadan, yerel eğitim çiftlerinden vektör öğrenir. Sayıma dayalı yöntemlerin artımlı sürümleri de mümkündür
-- Skip-gram'da sığ bir yapay sinir ağı: merkez kelimenin one-hot'ı → gizli katman = $\mathbf{W}$ matrisinin o kelimeye ait satırı, aktivasyonsuz bir arama (lookup) → çıktı, $\mathbf{W}'$ ile aday bağlamları puanlar. CBOW'da önce bağlam vektörleri birleştirilir
-- Klasik kullanımda çoğunlukla $\mathbf{W}$ saklanır. Zorunluluk değil — iki matrisi toplayan yaklaşımlar da var
+- Ölçeklenebilirlik önemli bir etkendi: 100.000 kelimede on milyar *olası* hücre; toplu PPMI–SVD önce sayar, sonra çarpanlarına ayırır
+- word2vec (Mikolov vd. 2013): matrisi açıkça kurmadan, yerel eğitim çiftlerinden vektör öğrenir
+- Skip-gram'da sığ bir ağ: merkez kelimenin one-hot'ı → $\mathbf{W}$'nin o satırı (aktivasyonsuz arama) → $\mathbf{W}'$ aday bağlamları puanlar. CBOW'da önce bağlam vektörleri birleştirilir
+- Çoğunlukla $\mathbf{W}$ saklanır; zorunluluk değil
 
 ::: {.takeaway}
-[Tahmin görevini, yeniden kullanabileceğimiz vektörler öğrenmek için kuruyoruz.]{.hl} Bir transformer'ın girdi embedding tablosu (7. bölüm) benzer biçimde çalışır; ama orada satırlar kelimelere değil, token'lara aittir.
+[Tahmin görevini, yeniden kullanılacak vektörleri öğrenmek için kuruyoruz.]{.hl} Bir transformer'ın girdi embedding tablosu (7. bölüm) benzer çalışır; satırları token'lara aittir.
 :::
 
 ::: {.notes}
@@ -551,7 +551,7 @@ güncellemeler aldığı için birbirine yaklaşır.
 | `failed`–`opera` | 0   | −0,34                         | 0,416                                 | 0,538 | 0,416        |
 :::
 
-- Tek bir etiketli terimin iç çarpıma göre türevi $\sigma(z) - y$: [tahmin eksi hedef]{.hl}. Toplam kaybın türevi, ilgili bütün terimlerin toplamıdır
+- Tek bir etiketli terimin iç çarpıma göre türevi $\sigma(z) - y$: [tahmin eksi hedef]{.hl}
 - Yalnızca $\mathbf{v}$'yi 0,05 öğrenme oranıyla güncelleyin: `failed`·`pump` 0,570 → **0,590**; `failed`·`opera` −0,340 → −0,359
 - Bağlam vektörlerini de güncelleyin: 0,603 ve −0,374 — aynı yönler, kabaca 1,7 katı mesafe
 
@@ -661,15 +661,15 @@ Koşumuzda sözlük içi token'ların %26,6'sı gidiyor: 6.397.826 → 4.698.743
 ::: {.column width="48%" .compact}
 ### Negatifler $f(w)^{0{,}75}$ ile çekilir
 
-- 5.000 kat daha sık bir kelimenin negatif olarak çekilme olasılığı yalnızca yaklaşık 595 kat yüksek — fark kabaca sekiz kat daralır
-- Üs, ham unigram örneklemesine göre nadir bağlamların *göreli* payını artırır; onlara yeni bir sinyal türü kazandırmaz
-- 0,75 evrensel bir kuramsal optimum değil, ampirik bir tercih
+- 5.000 kat daha sık bir kelimenin çekilme olasılığı yalnızca yaklaşık 595 kat yüksek — fark kabaca sekiz kat daralır
+- Üs nadir bağlamların *göreli* payını artırır; yeni bir sinyal türü eklemez
+- Ampirik bir tercih, kuramsal bir optimum değil
 :::
 
 ::::
 
 ::: {.takeaway}
-Levy vd. (2015): bu tür hiperparametreler [karşılaştırma sonuçlarını önemli ölçüde etkileyebilir]{.hl}. Üs, SGNS'nin örtük hedefindeki gürültü dağılımını da değiştirir.
+Levy vd. (2015): bu tür hiperparametreler [karşılaştırma sonuçlarını önemli ölçüde etkileyebilir]{.hl}.
 :::
 
 ::: {.notes}
@@ -760,12 +760,12 @@ Levy ve Goldberg (2014): negatif örneklemeli skip-gram'ın matris çarpanlaşt�
 
 $$\mathbf{v}_w \cdot \mathbf{u}_c = \mathrm{PMI}(w, c) - \log K$$
 
-- Koşullar: negatifler bağlam marjinalinden çekilir ve her çiftin iç çarpımı bağımsız seçilebilir. O zaman pozitif sayımlı çiftlerde optimum hedef budur. [Bütün word2vec sürümleri PPMI–SVD ile özdeş değildir]{.hl}
-- SGNS bu matrisi açıkça kurmaz; düşük boyutlu ortak vektörler bütün serbest optimumları aynı anda karşılayamayabilir, 0,75 üssü de hedefi değiştirir
-- Açık bir matris kurarken: SPPMI $= \max(\mathrm{PMI} - \log K,\ 0)$
+- Koşullar: negatifler bağlam marjinalinden çekilir ve her iç çarpım bağımsız seçilebilir; o zaman pozitif sayımlı çiftlerde optimum hedef budur
+- [Bütün word2vec sürümleri PPMI–SVD ile özdeş değildir]{.hl}: ortak düşük boyutlu vektörler bütün optimumları karşılayamayabilir, 0,75 üssü de hedefi değiştirir
+- Açık bir matris için: SPPMI $= \max(\mathrm{PMI} - \log K,\ 0)$
 
 ::: {.takeaway}
-Levy vd. (2015): sayma yöntemlerine word2vec'in kullandığı hiperparametreler verildiğinde, inceledikleri görevlerde performans farkı büyük ölçüde kapanır.
+Levy vd. (2015): hiperparametreler eşitlenince, inceledikleri görevlerde performans farkı büyük ölçüde kapanır.
 :::
 
 ::: {.src}
@@ -1142,12 +1142,11 @@ Tamamlamak için dördüncü komşular: `kitaplarımızdaki` → kitaplarda 0,90
 | `yaz` (mevsim; ayrıca "yazmak" emri) | yao 0,78; yağ 0,77; yağdı 0,77        | kış 0,86; olimpiyatları 0,84; aylarında 0,83 |
 | `kitap`–`kitle` kosinüsü             | 0,667                                 | 0,446                                        |
 
-- `kitap`: çekimler mi, *anlamsal* komşular mı? Hangisini isteyeceğiniz görevinize bağlı
-- `yaz`: bu koşuda fastText listesinde yazılışı benzeyen biçimler öne çıkıyor. Nedenin yalnızca kelimenin kısalığı olduğunu söylemek için n-gram ayarlarını, sıklığı ve farklı seed'leri karşılaştırmak gerekir
-- İki uzayın kosinüs dağılımları farklı olabilir: 0,667 ile 0,446'nın oranı "bir buçuk kat daha benzer" diye okunamaz
+- `kitap`: çekimler mi, *anlamsal* komşular mı? Görevinize bağlı. `yaz`: fastText'te yazılışı benzeyen biçimler öne çıkıyor
+- 0,667 ile 0,446'nın oranı "bir buçuk kat daha benzer" diye okunamaz: iki uzayın kosinüs dağılımları farklı olabilir
 
 ::: {.takeaway}
-fastText, sözlük dışı biçimlerin ve çekim çeşitliliğinin önemli olduğu görevlerde güçlü bir aday. [Karakter paylaşımı istenmeyen yakınlık da yaratabilir: kapsama ve görev başarısıyla değerlendirin.]{.hl}
+fastText, sözlük dışı biçimler ve çekim çeşitliliği önemliyse güçlü bir aday. [Karakter paylaşımı istenmeyen yakınlık da yaratabilir: kapsama ve görev başarısıyla değerlendirin.]{.hl}
 :::
 
 ::: {.notes}
@@ -1181,11 +1180,11 @@ Yine 2. bölümün dört 20 Newsgroups kategorisi, aynı bölünme, üstte aynı
 | ortalama GloVe + doc2vec              | 0,845     | 200    |
 
 ::: {.takeaway}
-Bu bölünmede en yüksek doğruluk TF-IDF satırında; yoğun temsiller 100–200 koordinatla ona yakın. [Eşleştirilmiş testte TF-IDF – ortalama GloVe farkı rastlantıyla açıklanması zor: 135'e 84 belge, p = 0,0007.]{.hl}
+Bu bölünmede en yüksek doğruluk TF-IDF'te. [Eşleştirilmiş testte TF-IDF – ortalama GloVe farkı rastlantıyla açıklanması zor: 135'e 84 belge, p = 0,0007.]{.hl}
 :::
 
 ::: {.small-note}
-Tek bir doğruluğun standart hatası (≈ 0,010), iki modelin farkının standart hatası değildir. McNemar: TF-IDF – idf ağırlıklı 129'a 81 (p = 0,0011); iki GloVe ortalaması 66'ya 63 (p = 0,86). doc2vec tahminleri birebir yeniden üretilemediği için o satırlarda bu hesap yok.
+Tek bir doğruluğun standart hatası (≈ 0,010), iki modelin farkının standart hatası değildir. İki GloVe ortalaması: 66'ya 63 (p = 0,86). doc2vec satırlarında bu hesap yok: tahminler birebir yeniden üretilemiyor.
 :::
 
 ::: {.notes}
@@ -1224,7 +1223,7 @@ cümle benzerliği gibi görevlerde karşılaştırılabilecek ayrı bir temel y
 
 ## Ortalama almanın yok ettikleri
 
-- Kapsama (coverage): GloVe derlemdeki *token*'ların %98,6'sını, *tip*lerin %84,5'ini kapsıyor. Kapsanmayan biçimler token kütlesinin %1,4'ü; ne kadarının yazım hatası, özel ad ya da alan terimi olduğu ayrıca incelenmeli. Ortalama yöntemi bu biçimleri dışarıda bırakıyor
+- Kapsama (coverage): GloVe *token*'ların %98,6'sını, *tip*lerin %84,5'ini kapsıyor; kapsanmayan biçimler token kütlesinin %1,4'ü ve ortalama onları dışarıda bırakıyor
 
 ```text
 a = "the pump failed and the valve is fine"
@@ -1271,15 +1270,15 @@ Attention) konusu.
 :::
 
 ::: {.column width="58%"}
-- Zıt anlamlı çift de yüksek kosinüs alıyor — **zıt anlamlı (antonym) problemi**. 0,881 ile 0,880 arasındaki farkı anlamlı bir sıralama saymak için kanıtımız yok
-- GloVe'da bir hata değil: model kelimenin *çevresini* görür. `hot` ve `cold` aynı kelimelerin yanında geçer
-- Bu uzayda kosinüs büyük ölçüde *ilişkililiği* (relatedness) yansıtır; benzerlik de zıtlık da birer ilişkililik türüdür
+- Zıt anlamlı çift de yüksek kosinüs alıyor — **zıt anlamlı (antonym) problemi**; 0,881 ile 0,880 arasındaki fark anlamlı bir sıralama değil
+- Model kelimenin *çevresini* görür: `hot` ve `cold` aynı kelimelerin yanında geçer
+- Bu uzayda kosinüs büyük ölçüde *ilişkililiği* (relatedness) yansıtır
 :::
 
 ::::
 
 ::: {.takeaway}
-[Statik vektörlerin ham kosinüsünü doğrudan duygu ya da kutupluluk ölçüsü olarak yorumlamayın.]{.hl} Göreve özgü etiketler ayrımı öğrenmeye yardım edebilir; garanti değildir.
+[Statik vektörlerin ham kosinüsünü doğrudan duygu ya da kutupluluk ölçüsü olarak yorumlamayın.]{.hl}
 :::
 
 ::: {.notes}
@@ -1395,7 +1394,7 @@ ilişkili olmak eş anlamlı olmak değildir. Bu kısa listelerden genel kalite
 sıralaması çıkarılamaz.
 :::
 
-## Koordinat sisteminin keyfîliği ve eğitimler arası değişkenlik
+## Keyfî koordinatlar, değişken eğitimler
 
 :::: {.columns}
 
@@ -1409,14 +1408,14 @@ Aynı derlem, aynı ayarlar, iki seed (`text8`, 6.794.527 token)
 | dik hizalamadan (Procrustes) sonra | +0,951 |
 | ilk 10 komşu örtüşmesi, en sık 1.000 kelime | %62,2 |
 | ilk 10 komşu örtüşmesi, en nadir 1.000 kelime | %46,6 |
-| rastgele dik dönüşüm sonrası en büyük kosinüs değişimi | 5,5 × 10⁻⁷ |
+| rastgele dik dönüşümde en büyük kosinüs değişimi | 5,5 × 10⁻⁷ |
 :::
 :::
 
 ::: {.column width="50%" .compact}
-- Merkez ve bağlam tablolarını aynı dik $R$ ile çarpın: $(WR)(UR)^\top = WU^\top$ — [her koordinat değişir, hiçbir iç çarpım değişmez]{.hl}
-- Bir koordinat belirli bir eğitimde bir özellikle ilişkili çıkabilir; bu yorum eşdeğer bir koordinat dönüşümünde korunmayabilir
-- +0,951: koordinat seçimi farkın önemli bir bölümünü açıklıyor; iki uzay yalnızca dönmüş kopyalar değil — komşu örtüşmeleri yerel farkların sürdüğünü gösteriyor
+- İki tabloyu aynı dik $R$ ile çarpın: $(WR)(UR)^\top = WU^\top$ — [her koordinat değişir, hiçbir iç çarpım değişmez]{.hl}
+- Bir koordinatın bir eğitimdeki anlamı, koordinat dönüşümünde korunmayabilir
+- +0,951: koordinat seçimi farkın çoğunu açıklıyor, hepsini değil — komşu örtüşmeleri yerel farkların sürdüğünü gösteriyor
 :::
 
 ::::
@@ -1551,13 +1550,12 @@ cevap araması yapılmaz. Analojide hem soru kapsamı hem aday sözlüğü sın�
 |                    | GloVe · 6 milyar token   | sıfırdan · 6,8 milyon token       |
 |:-------------------|:-------------------------|:----------------------------------|
 | WordSim-353        | 0,533 · %0,0 atlandı     | **0,627** · %11,9 atlandı          |
-| iki modelin de kapsadığı 311 çift | 0,549     | 0,627                              |
-| Google analojileri, puanlanan sorular | 0,633 · 19.486 soru | 0,200 · 9.282 soru     |
-| Google analojileri, 19.544 sorunun tamamı | 0,631 | 0,095                          |
+| ortak 311 çift     | 0,549                    | 0,627                              |
+| Analoji, puanlanan sorular | 0,633 · 19.486 soru | 0,200 · 9.282 soru            |
+| Analoji, tüm 19.544 soru | 0,631              | 0,095                              |
 
-- WordSim'de iki skor aynı çiftler üzerinde hesaplanmadı; ortak çiftlerde ölçünce GloVe yalnızca 0,549'a çıkıyor — burada kapsama farkı aradaki farkı kapatmıyor
-- Analojide paydalar çok farklı: atlanan sorular yanlış sayılınca (`dummy4unknown=True`) küçük modelin puanı yarıya iniyor
-- GloVe'un atladığı 58 sorunun hepsi `denar` içeriyor: kelime sözlükte var (sıra 394.434), ama varsayılan 300.000 sınırının dışında
+- WordSim: ortak çiftlerde de küçük model önde — burada kapsama farkı aradaki farkı kapatmıyor. Analoji: atlanan sorular yanlış sayılınca (`dummy4unknown=True`) küçük modelin puanı yarıya iniyor
+- GloVe'un atladığı 58 sorunun hepsi `denar` içeriyor: sözlükte var (sıra 394.434), varsayılan 300.000 sınırının dışında
 
 ::: {.takeaway}
 [Puanla birlikte kapsamayı ve puanlanan örnek sayısını verin.]{.hl} Atlanan örneklerin etkisinin yönü, hangi örneklerin atlandığına bağlıdır.
@@ -1649,13 +1647,13 @@ uygun girdi boyutuna ve yapıya sahip sonraki modellerde kullanılabilir.
 
 | kısıt                        | bu bölümdeki kanıt                                  | yaygın ele alma / azaltma yöntemi |
 |:-------------------------|:---------------------------------------------|:-----------------------------|
-| Kelime biçimi başına tek statik vektör | `python` için farklı kullanımlardan komşular birlikte | bağlama göre hesaplanan token temsilleri (7. bölüm) |
-| Sırasız birleştirmede ilişki kaybı | aynı token'ların farklı sırası aynı ortalamayı veriyor | sırayı dikkate alan birleştirme ya da dizi modelleri (6. bölüm) |
-| Sözlük kapsamı               | OOV biçimlerde `KeyError`; Türkçe örneklemde OOV token oranı %7,3 | alt kelime temsilleri; görevde kapsama değerlendirmesi |
-| Benzerlik ile zıtlığın karışması | `increase`/`decrease` 0,881                     | göreve uygun etiketler ve karşılaştırma modelleriyle değerlendirme |
-| Yön dağılımındaki eşitsizlik | ilk 50.000 kelimelik örneklemde ortalama kosinüs 0,029 | merkezleme ya da son işlemleri görevde sınama |
-| Nadir ya da alan dışı kelimelerde belirsizlik | bazı alan terimlerinin komşuları beklenen ilişkiyi vermiyor | alan değerlendirmesi, uyarlama, alt kelimeler |
-| Toplumsal çağrışımlar        | `homemaker` seçilen eksende +0,363                  | birden çok ölçütle değerlendirme; veri, eğitim ve karar müdahalelerini sınama |
+| Biçim başına tek statik vektör | `python`: farklı kullanımlardan komşular | bağlama göre hesaplanan temsiller (7. bölüm) |
+| Sırasız birleştirme          | aynı token'lar, farklı sıra → aynı ortalama | dizi modelleri (6. bölüm) |
+| Sözlük kapsamı               | `KeyError`; Türkçe örneklemde OOV %7,3 | alt kelime temsilleri |
+| Benzerlik–zıtlık karışması   | `increase`/`decrease` 0,881 | göreve uygun etiketlerle değerlendirme |
+| Yön dağılımında eşitsizlik   | ortalama kosinüs 0,029 (ilk 50.000 örneklemi) | merkezlemeyi görevde sınama |
+| Nadir / alan dışı kelimeler  | bazı alan terimlerinin komşuları | alan değerlendirmesi, uyarlama |
+| Toplumsal çağrışımlar        | `homemaker` +0,363 | birden çok ölçüt; müdahaleleri sınama |
 
 ::: {.takeaway}
 Statik bir embedding tip düzeyinde bir arama tablosudur: kelime biçimi → tek vektör. [Bağlamsal model, token'ın temsilini erişebildiği çevreye göre hesaplar.]{.hl}

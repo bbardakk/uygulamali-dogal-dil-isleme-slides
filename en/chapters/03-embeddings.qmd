@@ -395,10 +395,10 @@ This is latent semantic analysis (Deerwester et al. 1990).
 :::
 
 ::: {.column width="42%" .compact}
-- In the ten-sentence corpus the royalty words appear on the left and the food words on the right
-- `man` and `woman` are close in this view because they are used in similar sentence structures; [their contexts are not identical]{.hl}
-- Why dimensions 2 and 3? The first coordinate is *negative* for every word (between −0.70 and −2.14): a shared direction, but the magnitudes differ, so it is not without discriminating information
-- A space not spread evenly over directions is called **anisotropic**; a shared mean direction is one form of it. Measured on GloVe later
+- Royalty words on the left, food words on the right
+- `man` and `woman` are close in this view; [their contexts are not identical]{.hl}
+- The first coordinate is *negative* for every word (−0.70 … −2.14): a shared direction, which is why we plot dimensions 2 and 3
+- Not spread evenly over directions: **anisotropy**, measured on GloVe later
 :::
 
 ::::
@@ -417,13 +417,13 @@ from the shared direction. Between two different one-hots the cosine is always
 
 ## From counting to predicting
 
-- Scalability was an important factor: a square co-occurrence matrix over 100,000 words has ten billion *possible* cells. In the batch PPMI–SVD pipeline the counts are accumulated first and the matrix factorized afterwards
-- word2vec (Mikolov et al. 2013): learns vectors from local training pairs without building the co-occurrence matrix explicitly. Incremental versions of count-based methods are possible too
-- In skip-gram, a shallow neural network: the centre word's one-hot → hidden layer = that word's row of $\mathbf{W}$, a lookup with no activation → the output scores candidate contexts with $\mathbf{W}'$. In CBOW the context vectors are combined first
-- In classic use it is mostly $\mathbf{W}$ that is kept. Not a requirement — some approaches add the two matrices
+- Scalability was an important factor: ten billion *possible* cells at 100,000 words; batch PPMI–SVD counts first and factorizes afterwards
+- word2vec (Mikolov et al. 2013): learns vectors from local training pairs without building the matrix explicitly
+- In skip-gram, a shallow network: the centre word's one-hot → that row of $\mathbf{W}$ (a lookup, no activation) → $\mathbf{W}'$ scores candidate contexts. In CBOW the context vectors are combined first
+- Mostly $\mathbf{W}$ is kept; not a requirement
 
 ::: {.takeaway}
-[We set up the prediction task in order to learn vectors we can reuse.]{.hl} The input embedding table of a transformer (Chapter 7) works in a similar way; there the rows belong to tokens, not words.
+[We set up the prediction task to learn vectors we can reuse.]{.hl} A transformer's input embedding table (Chapter 7) works similarly; its rows belong to tokens.
 :::
 
 ::: {.notes}
@@ -554,7 +554,7 @@ Four dimensions in place of 300. Centre `failed`: $\mathbf{v} = (0.4,\ -0.2,\ 0.
 | `failed`–`opera` | 0   | −0.34                         | 0.416                                 | 0.538 | 0.416        |
 :::
 
-- For a single labelled term, the derivative with respect to the dot product is $\sigma(z) - y$: [prediction minus target]{.hl}. The derivative of the total loss is the sum over all the terms involved
+- The derivative of one labelled term with respect to the dot product is $\sigma(z) - y$: [prediction minus target]{.hl}
 - Update only $\mathbf{v}$ at learning rate 0.05: `failed`·`pump` 0.570 → **0.590**; `failed`·`opera` −0.340 → −0.359
 - Update the context vectors too: 0.603 and −0.374 — the same directions, roughly 1.7 times as far
 
@@ -666,15 +666,15 @@ In our run 26.6% of the in-vocabulary tokens go: 6,397,826 → 4,698,743.
 ::: {.column width="48%" .compact}
 ### Negatives are drawn with $f(w)^{0.75}$
 
-- A word 5,000 times more frequent is only about 595 times more likely to be drawn as a negative — the gap narrows by a factor of about eight
-- The exponent raises the *relative* share of rare contexts compared with raw unigram sampling; it does not give them a new kind of signal
-- 0.75 is an empirical choice, not a universal theoretical optimum
+- A word 5,000 times more frequent is only about 595 times more likely to be drawn — the gap narrows about eightfold
+- The exponent raises the *relative* share of rare contexts; it adds no new kind of signal
+- An empirical choice, not a theoretical optimum
 :::
 
 ::::
 
 ::: {.takeaway}
-Levy et al. (2015): hyperparameters of this kind [can affect comparison results substantially]{.hl}. The exponent also changes the noise distribution in the implicit objective of SGNS.
+Levy et al. (2015): hyperparameters of this kind [can affect comparison results substantially]{.hl}.
 :::
 
 ::: {.notes}
@@ -767,12 +767,12 @@ Levy and Goldberg (2014): how skip-gram with negative sampling relates to matrix
 
 $$\mathbf{v}_w \cdot \mathbf{u}_c = \mathrm{PMI}(w, c) - \log K$$
 
-- The conditions: negatives are drawn from the context marginal and the dot product of every pair can be chosen independently. Then this is the optimal target for pairs with a positive count. [Not every version of word2vec is identical to PPMI–SVD]{.hl}
-- SGNS does not build this matrix explicitly; shared low-dimensional vectors may not meet all the free optima at once, and the 0.75 exponent changes the target too
-- When building an explicit matrix: SPPMI $= \max(\mathrm{PMI} - \log K,\ 0)$
+- The conditions: negatives come from the context marginal and every dot product can be chosen independently; then this is the optimal target for pairs with a positive count
+- [Not every version of word2vec is identical to PPMI–SVD]{.hl}: shared low-dimensional vectors may not meet all the optima, and the 0.75 exponent changes the target
+- For an explicit matrix: SPPMI $= \max(\mathrm{PMI} - \log K,\ 0)$
 
 ::: {.takeaway}
-Levy et al. (2015): give the count-based methods the hyperparameters word2vec uses, and on the tasks they examined the performance gap largely closes.
+Levy et al. (2015): with matched hyperparameters, on the tasks they examined, the performance gap largely closes.
 :::
 
 ::: {.src}
@@ -856,10 +856,10 @@ $$\mathcal{L} = \sum_{(w,c)\,:\,X_{wc} > 0} f(X_{wc}) \left(\mathbf{v}_w \cdot \
 :::: {.columns}
 
 ::: {.column width="58%" .compact}
-- Accumulates the co-occurrence counts explicitly; learns vectors and bias terms with a count-weighted squared error
-- **Why $\log X$?** Counts span a very wide range; the logarithm turns multiplicative ratios into additive differences
-- **Why the biases?** They can model part of the overall usage tendencies of the word and the context; [the dot products cannot be read as exactly PMI]{.hl}
-- **Why $f$?** It lowers the weight of rare pairs and stays at 1 for $x \geq 100$; cells with a zero count are left out of the sum
+- Accumulates co-occurrence counts explicitly; learns vectors and biases with a count-weighted squared error
+- **Why $\log X$?** Counts span a wide range; logs turn ratios into differences
+- **Why the biases?** They can model overall usage tendencies; [the dot products are not exactly PMI]{.hl}
+- **Why $f$?** Down-weights rare pairs, capped at 1 for $x \geq 100$; zero counts are outside the sum
 :::
 
 ::: {.column width="42%"}
@@ -956,7 +956,7 @@ make use of the context.
 :::: {.columns}
 
 ::: {.column width="50%"}
-### With the inputs removed from the candidates
+### Inputs removed
 
 ::: {.roomy}
 | word     | cosine |
@@ -986,7 +986,7 @@ make use of the context.
 ::::
 
 ::: {.takeaway}
-`gensim` normalizes the inputs and removes the three input words from the candidates. With the scores held fixed, the unfiltered nearest neighbour is [`king`]{.hl}; `queen` comes first only in the candidate set without the inputs. The candidate set is part of the definition of the task.
+`gensim` normalizes the inputs and removes them from the candidates. With the scores fixed, the unfiltered nearest neighbour is [`king`]{.hl}; `queen` is first only without the inputs. The candidate set is part of the task.
 :::
 
 ::: {.notes}
@@ -1157,12 +1157,11 @@ Fourth neighbours, for completeness: `kitaplarımızdaki` → kitaplarda 0.90;
 | `yaz` (summer; also "write")         | yao 0.78, yağ 0.77, yağdı 0.77        | kış 0.86, olimpiyatları 0.84, aylarında 0.83 |
 | cosine of `kitap`–`kitle`            | 0.667                                 | 0.446                                        |
 
-- `kitap`: inflections or *semantic* neighbours? Which you want depends on your task
-- `yaz`: in this run, forms with similar spelling come to the front of the fastText list. To say the cause is only the word's shortness, one would have to compare n-gram settings, frequency and different seeds
-- The cosine distributions of the two spaces can differ: the ratio of 0.667 to 0.446 cannot be read as "half again as similar"
+- `kitap`: inflections or *semantic* neighbours? It depends on your task. `yaz`: spelling neighbours come to the front in fastText
+- The ratio of 0.667 to 0.446 cannot be read as "half again as similar": the cosine distributions of the two spaces can differ
 
 ::: {.takeaway}
-fastText is a strong candidate where out-of-vocabulary forms and inflectional variety matter. [Character sharing can also create unwanted closeness: evaluate it by coverage and by task performance.]{.hl}
+fastText is a strong candidate where out-of-vocabulary forms and inflection matter. [Character sharing can also create unwanted closeness: evaluate by coverage and task performance.]{.hl}
 :::
 
 ::: {.notes}
@@ -1197,11 +1196,11 @@ Chapter 2's four 20 Newsgroups categories, same split, same logistic regression 
 | averaged GloVe + doc2vec         | 0.845    | 200        |
 
 ::: {.takeaway}
-On this split the highest accuracy is in the TF-IDF row; the dense representations come close with 100–200 coordinates. [In the paired test the TF-IDF – averaged GloVe gap is hard to explain by chance: 135 documents against 84, p = 0.0007.]{.hl}
+On this split TF-IDF has the highest accuracy. [In the paired test its gap to averaged GloVe is hard to explain by chance: 135 documents against 84, p = 0.0007.]{.hl}
 :::
 
 ::: {.small-note}
-The standard error of a single accuracy (≈ 0.010) is not the standard error of the difference between two models. McNemar: TF-IDF – idf-weighted 129 against 81 (p = 0.0011); the two GloVe averages 66 against 63 (p = 0.86). The doc2vec predictions cannot be reproduced exactly, so there is no such calculation for those rows.
+The standard error of one accuracy (≈ 0.010) is not that of the difference between two models. The two GloVe averages: 66 against 63 (p = 0.86). No such calculation for the doc2vec rows: their predictions cannot be reproduced exactly.
 :::
 
 ::: {.notes}
@@ -1243,7 +1242,7 @@ sentence similarity.
 
 ## What averaging destroys
 
-- Coverage: GloVe covers 98.6% of the *tokens* in the corpus and 84.5% of the *types*. The forms it does not cover are 1.4% of the token mass; how many are typos, proper names or domain terms has to be examined separately. The averaging method leaves those forms out
+- Coverage: GloVe covers 98.6% of the *tokens* and 84.5% of the *types*; the uncovered forms are 1.4% of the token mass, and averaging leaves them out
 
 ```text
 a = "the pump failed and the valve is fine"
@@ -1291,15 +1290,15 @@ Attention).
 :::
 
 ::: {.column width="58%"}
-- The antonym pair gets a high cosine too — the **antonym problem**. We have no evidence for reading the gap between 0.881 and 0.880 as a meaningful ordering
-- Not a bug in GloVe: the model sees a word's *surroundings*. `hot` and `cold` appear next to the same words
-- In this space cosine mostly reflects *relatedness*; similarity and oppositeness are both kinds of it
+- The antonym pair gets a high cosine too — the **antonym problem**; the gap between 0.881 and 0.880 is not a meaningful ordering
+- The model sees a word's *surroundings*: `hot` and `cold` appear next to the same words
+- In this space cosine mostly reflects *relatedness*
 :::
 
 ::::
 
 ::: {.takeaway}
-[Do not read the raw cosine of static vectors directly as a measure of sentiment or polarity.]{.hl} Task-specific labels can help a model learn the distinction; they are not a guarantee.
+[Do not read the raw cosine of static vectors directly as a measure of sentiment or polarity.]{.hl}
 :::
 
 ::: {.notes}
@@ -1345,10 +1344,10 @@ relatedness.
 :::
 
 ::: {.column width="54%" .compact}
-- **Isotropic** = the same in every direction. **Anisotropic** = the distribution of the vectors is not the same in every direction; a shift toward a common direction is one form of it, [but it is not required]{.hl}
-- The mean cosine and the norm of the mean vector are not two independent pieces of evidence: $\bar{c} = (n\lVert\bar{v}\rVert^2 - 1)/(n-1) \approx 0.029$
-- The distribution over random pairs shows how unusual a score is; a fixed value such as 0.3 does not by itself mean a semantic relation
-- Centring removes the mean direction; it does not remove all anisotropy. *All-but-the-top* (Mu, Bhat and Viswanath 2018): measure its effect on the task
+- **Isotropic** = the same in every direction. **Anisotropic** = not; a shift toward a common direction is one form, [not a requirement]{.hl}
+- Mean cosine and mean-vector norm are one piece of evidence: $\bar{c} = (n\lVert\bar{v}\rVert^2 - 1)/(n-1) \approx 0.029$
+- Random pairs show how unusual a score is; a fixed 0.3 does not by itself mean a semantic relation
+- Centring removes the mean direction, not all anisotropy. *All-but-the-top* (Mu, Bhat and Viswanath 2018): measure on the task
 :::
 
 ::::
@@ -1418,7 +1417,7 @@ physical process is not the same as being synonymous. No general quality ranking
 can be drawn from these short lists.
 :::
 
-## The arbitrariness of coordinates and the variability between runs
+## Arbitrary coordinates, variable runs
 
 :::: {.columns}
 
@@ -1432,20 +1431,20 @@ Same corpus, same settings, two seeds (`text8`, 6,794,527 tokens)
 | after orthogonal (Procrustes) alignment | +0.951 |
 | top-10 neighbour overlap, 1,000 most frequent words | 62.2% |
 | top-10 neighbour overlap, 1,000 rarest words | 46.6% |
-| largest change in any cosine after a random orthogonal transformation | 5.5 × 10⁻⁷ |
+| largest cosine change under a random orthogonal map | 5.5 × 10⁻⁷ |
 :::
 :::
 
 ::: {.column width="50%" .compact}
-- Multiply the centre and context tables by the same orthogonal $R$: $(WR)(UR)^\top = WU^\top$ — [every coordinate changes, no dot product does]{.hl}
-- A coordinate may be related to a property in one training run; that reading may not survive an equivalent change of coordinates
-- +0.951: the choice of coordinates accounts for an important part of the difference; the two spaces are not merely rotated copies — the neighbour overlaps show that local differences remain
+- Multiply both tables by the same orthogonal $R$: $(WR)(UR)^\top = WU^\top$ — [every coordinate changes, no dot product does]{.hl}
+- A coordinate's meaning in one run may not survive a change of coordinates
+- +0.951: the coordinates explain much of the difference, not all — the neighbour overlaps show local differences remain
 :::
 
 ::::
 
 ::: {.takeaway}
-Same corpus + different seed → geometrically different, functionally similar spaces. Do not build an argument on one neighbour list from one training run.
+Same corpus + different seed → geometrically different, functionally similar spaces. Do not argue from one neighbour list of one run.
 :::
 
 ::: {.notes}
@@ -1489,11 +1488,11 @@ Projection onto `woman` − `man`
 :::
 
 ::: {.column width="60%" .compact}
-The sign shows the direction of the projection onto the difference direction we chose; it does not measure every dimension of social bias.
+The sign shows the direction of the projection on the chosen axis; it does not measure all of social bias.
 
-1. **Usually not a training error** — systematic associations in the training data can carry over into the geometry; what you measure is a projection produced jointly by the corpus, the model and the axis you chose
-2. **It can carry over into decisions** — the effect depends on the downstream model's objective, the other inputs and the decision rule; evaluate the outputs of the application too
-3. **A single intervention does not remove every indicator** — after the intervention, [gender-related information can remain]{.hl} in the neighbourhood and classification structure (Gonen & Goldberg 2019)
+1. **Usually not a training error** — associations in the data carry over into the geometry; what you measure depends on the corpus, the model and the axis
+2. **It can carry over into decisions** — depending on the downstream objective, inputs and decision rule; evaluate the application's outputs too
+3. **One intervention does not remove every indicator** — [gender-related information can remain]{.hl} (Gonen & Goldberg 2019)
 :::
 
 ::::
@@ -1577,13 +1576,12 @@ candidate vocabulary are limited.
 |                    | GloVe · 6 billion tokens | from scratch · 6.8 million tokens |
 |:-------------------|:-------------------------|:----------------------------------|
 | WordSim-353        | 0.533 · 0.0% skipped     | **0.627** · 11.9% skipped          |
-| the 311 pairs both models cover | 0.549       | 0.627                              |
-| Google analogies, questions scored | 0.633 · 19,486 questions | 0.200 · 9,282 questions |
-| Google analogies, all 19,544 questions | 0.631 | 0.095                             |
+| the 311 common pairs | 0.549                  | 0.627                              |
+| Analogies, questions scored | 0.633 · 19,486  | 0.200 · 9,282                      |
+| Analogies, all 19,544 questions | 0.631       | 0.095                              |
 
-- On WordSim the two scores were not computed on the same pairs; measured on the common pairs GloVe only moves to 0.549 — here the coverage difference does not close the gap
-- In the analogies the denominators differ a lot: counting skipped questions as wrong (`dummy4unknown=True`) halves the small model's score
-- All 58 questions GloVe skips contain `denar`: the word is in the vocabulary (rank 394,434) but outside the default limit of 300,000
+- WordSim: the small model is ahead on the common pairs too — here coverage does not close the gap. Analogies: counting skipped questions as wrong (`dummy4unknown=True`) halves the small model's score
+- All 58 questions GloVe skips contain `denar`: in the vocabulary (rank 394,434), outside the default limit of 300,000
 
 ::: {.takeaway}
 [Give the coverage and the number of examples scored together with the score.]{.hl} The direction of the effect of skipped examples depends on which examples are skipped.
@@ -1677,13 +1675,13 @@ structure.
 
 | limitation                   | evidence from this chapter                          | common way to address or mitigate it |
 |:-------------------------|:---------------------------------------------|:-----------------------------|
-| One static vector per word form | for `python`, neighbours from different usages together | token representations computed from context (Chapter 7) |
-| Relations lost in unordered combination | the same tokens in a different order give the same mean | combination that takes order into account, or sequence models (Chapter 6) |
-| Vocabulary coverage          | `KeyError` on OOV forms; OOV token rate 7.3% on the Turkish sample | subword representations; evaluating coverage on the task |
-| Similarity and oppositeness mixed | `increase`/`decrease` 0.881                    | evaluation with task-suited labels and comparison models |
-| Unevenness in the distribution of directions | mean cosine 0.029 in the top-50,000 sample | testing centring or post-processing on the task |
-| Uncertainty on rare or out-of-domain words | neighbours of some domain terms do not give the expected relation | domain evaluation, adaptation, subwords |
-| Social associations          | `homemaker` +0.363 on the chosen axis               | evaluation with several metrics; testing data, training and decision interventions |
+| One static vector per form   | `python`: neighbours from different usages | representations computed from context (Ch. 7) |
+| Unordered combination        | same tokens, different order → same mean | sequence models (Ch. 6) |
+| Vocabulary coverage          | `KeyError`; OOV 7.3% on the Turkish sample | subword representations |
+| Similarity and oppositeness mixed | `increase`/`decrease` 0.881 | evaluation with task-suited labels |
+| Uneven directions            | mean cosine 0.029 (top-50,000 sample) | testing centring on the task |
+| Rare / out-of-domain words   | neighbours of some domain terms | domain evaluation, adaptation |
+| Social associations          | `homemaker` +0.363 | several metrics; testing interventions |
 
 ::: {.takeaway}
 A static embedding is a type-level lookup table: word form → one vector. [A contextual model computes the token's representation from the surroundings it can access.]{.hl}
@@ -1874,17 +1872,17 @@ The longer answers from the chapter.
 :::: {.columns .compact}
 
 ::: {.column width="50%"}
-1. **Compare the small example** for windows 1 and 4, other settings fixed. Which neighbourhoods change? If the expected tendency does not show, report that too
-2. **The limits of analogies**: three examples that give the expected answer, three that do not. Keep normalization and the candidate filter fixed; compare with the nearest-neighbour baseline
-3. **Audit your own domain**: twenty terms in the model's language; fix the criterion in advance; Spearman correlation between good / plausible / weak grades and frequency rank
+1. **Compare the small example** for windows 1 and 4. Which neighbourhoods change? Report it if the expected tendency does not show
+2. **Limits of analogies**: three that give the expected answer, three that do not; normalization and filter fixed; compare with the nearest-neighbour baseline
+3. **Audit your own domain**: twenty terms; criterion fixed in advance; Spearman between grades and frequency rank
 4. **Vocabulary coverage**: OOV learning curves in Turkish and English with fixed test sets
 :::
 
 ::: {.column width="50%"}
-5. **The limit of averaging**: two sentences with the same tokens the same number of times, in a different order; which relation is lost?
-6. **TF-IDF and dense representations**: choose settings on a validation set, use the test set only at the end; if there is no gain, discuss that too
-7. **Implement CBOW yourself**: extend the NumPy example; same data and training budget, compared by frequency group
-8. **Explore an association direction**: fix the pairs and terms in advance; compare neighbourhood and clustering structure after removing the direction
+5. **The limit of averaging**: two sentences with the same tokens in a different order; which relation is lost?
+6. **TF-IDF and dense representations**: choose settings on validation data, test only at the end; discuss it if there is no gain
+7. **Implement CBOW yourself**: extend the NumPy example; same data and budget, compared by frequency group
+8. **Explore an association direction**: fix pairs and terms in advance; compare the structure after removing the direction
 :::
 
 ::::
